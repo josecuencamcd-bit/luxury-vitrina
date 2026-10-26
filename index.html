@@ -829,12 +829,15 @@ body{
     if (!SESION.token) { toast('Tu sesión no es real.'); return; }
     if (!confirm('¿Cerrar el inventario ahora? Se guarda una copia de todo lo contado y las hojas de conteo quedan en CERO para el siguiente inventario. Esto no se puede deshacer.')) return;
     var btn = $('adCerrarInventario'); if (btn) btn.disabled = true;
+    // Se abre la pestaña YA, en el mismo click (si se abre recién dentro del
+    // .then() el navegador la bloquea por no venir "directo" de un toque).
+    var waWin = window.open('', '_blank');
     api('admin-cerrar-inventario', { token: SESION.token }).then(function(res){
       if (btn) btn.disabled = false;
-      if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo cerrar el inventario'); return; }
+      if (!res.ok) { if (waWin) waWin.close(); toast(res.data && res.data.error ? res.data.error : 'No se pudo cerrar el inventario'); return; }
       var d = res.data;
       toast('Cierre guardado (' + d.total_filas + ' filas). Abriendo WhatsApp…');
-      window.open(d.url, '_blank', 'noopener');
+      if (waWin && !waWin.closed) { waWin.location.href = d.url; } else { window.location.href = d.url; }
       var blob = new Blob(['﻿' + d.csv], { type: 'text/csv;charset=utf-8;' });
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob); a.download = 'cierre_inventario_' + HOY + '.csv';
@@ -842,7 +845,7 @@ body{
       // Deja la planilla de la pantalla en blanco (ya no hay conteos) y refresca el informe.
       INFORME_INV = []; renderInformeInventario();
       if (SESION.token) { cargarMisConteos(function(){}); }
-    }).catch(function(){ if (btn) btn.disabled = false; toast('No se pudo conectar con el servidor.'); });
+    }).catch(function(){ if (btn) btn.disabled = false; if (waWin) waWin.close(); toast('No se pudo conectar con el servidor.'); });
   }
   if ($('adCerrarInventario')) $('adCerrarInventario').onclick = cerrarInventarioReal;
 
@@ -882,12 +885,15 @@ body{
     $('ofWaPedido').onclick = function(){
       if (!SESION.token) { toast('Tu sesión no es real.'); return; }
       $('ofWaPedido').disabled = true;
+      // Se abre la pestaña YA, en el mismo click (si se abre recién dentro del
+      // .then() el navegador la bloquea por no venir "directo" de un toque).
+      var waWin = window.open('', '_blank');
       api('oferta-vigente-solicitar', { token: SESION.token, codigo: OF.codigo }).then(function(res){
         $('ofWaPedido').disabled = false;
-        if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo solicitar'); return; }
+        if (!res.ok) { if (waWin) waWin.close(); toast(res.data && res.data.error ? res.data.error : 'No se pudo solicitar'); return; }
         toast(res.data.sinNumero ? 'Falta el WhatsApp en CONFIG APP.' : 'Solicitud guardada — abriendo WhatsApp…');
-        window.open(res.data.url, '_blank', 'noopener');
-      }).catch(function(){ $('ofWaPedido').disabled = false; toast('No se pudo conectar con el servidor.'); });
+        if (waWin && !waWin.closed) { waWin.location.href = res.data.url; } else { window.location.href = res.data.url; }
+      }).catch(function(){ $('ofWaPedido').disabled = false; if (waWin) waWin.close(); toast('No se pudo conectar con el servidor.'); });
     };
   }
   function abrirDetalle(cod){
@@ -1027,20 +1033,24 @@ body{
     if (!SESION.token) { toast('Tu sesión no es real todavía: vuelve a entrar con tu correo y clave.'); return; }
     var items = PEDIDO_FLASH.map(function(it){ return { codigo: it.codigo, pct: it.pct }; });
     var btn = $('pfWaPedido'); if (btn) btn.disabled = true;
+    // Se abre la pestaña YA, en el mismo click (si se abre recién dentro del
+    // .then() el navegador la bloquea por no venir "directo" de un toque).
+    var waWin = window.open('', '_blank');
     api('oferta-flash-solicitar-lote', { token: SESION.token, items: items }).then(function(res){
       if (btn) btn.disabled = false;
-      if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo enviar el pedido'); return; }
+      if (!res.ok) { if (waWin) waWin.close(); toast(res.data && res.data.error ? res.data.error : 'No se pudo enviar el pedido'); return; }
       var el = $('pfPedido');
       var pre = document.createElement('div');
-      pre.style.cssText = 'background:var(--panel);border-radius:10px;padding:11px;margin-top:10px;font-size:11.5px;white-space:pre-wrap;line-height:1.5;border:1px dashed var(--gold);';
+      pre.style.cssText = 'background:var(--card);border:1px dashed var(--gold);border-radius:10px;padding:11px;margin-top:10px;font-size:11.5px;white-space:pre-wrap;line-height:1.5;';
       pre.textContent = res.data.texto;
       el.appendChild(pre);
       toast(res.data.sinNumero ? 'Falta el WhatsApp en CONFIG APP: elige el contacto al abrir WhatsApp.' : 'Nota de venta guardada — abriendo WhatsApp…');
       pre.scrollIntoView({behavior:'smooth', block:'nearest'});
-      window.open(res.data.url, '_blank', 'noopener');
+      if (waWin && !waWin.closed) { waWin.location.href = res.data.url; } else { window.location.href = res.data.url; }
       PEDIDO_FLASH = []; renderPedidoFlash();
     }).catch(function(){
       if (btn) btn.disabled = false;
+      if (waWin) waWin.close();
       toast('No se pudo conectar con el servidor. Revisa tu conexión.');
     });
   }
