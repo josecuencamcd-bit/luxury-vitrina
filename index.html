@@ -575,12 +575,18 @@ body{
         return;
       }
       PRODUCTO_ACTUAL_INV = p;
+      var estBadge = '';
+      if (p.estado) {
+        var clase = p.estado === 'CUADRA' ? 'cuadra' : (p.estado === 'SOBRA' ? 'sobra' : 'falta');
+        var txt = p.estado === 'CUADRA' ? 'CUADRA' : (p.estado + ' ' + Math.abs(Number(p.diferencia)||0));
+        estBadge = '<div class="estadoConteo ' + clase + '">' + txt + '</div>';
+      }
       el.innerHTML = '<div class="ficha"><div class="desc">' + esc(p.descripcion) + '</div>' +
         '<div class="nums">' +
           '<div class="num"><b>' + (Number(p.stock)||0) + '</b><span>Esperado</span></div>' +
-          '<div class="num"><b>' + (Number(p.stock_critico)||0) + '</b><span>Crítico</span></div>' +
-          '<div class="num"><b>' + esc(p.oficina||'-') + '</b><span>Oficina</span></div>' +
-        '</div></div>';
+          '<div class="num"><b>' + (Number(p.contado_total)||0) + '</b><span>Contado total</span></div>' +
+          '<div class="num"><b>' + (Number(p.contado_por_mi)||0) + '</b><span>Contado por mí</span></div>' +
+        '</div>' + estBadge + '</div>';
     }).catch(function(){ el.innerHTML = vacia('Error', 'No se pudo conectar con el servidor.'); });
   };
   function renderResumenInv(){
