@@ -705,7 +705,7 @@ body{
         $('envSol' + id).onclick = function(){
           var motivo = $('motivo' + id).value.trim();
           if (!motivo) { toast('Escribe un motivo breve'); return; }
-          var body = { token: SESION.token, codigo: conteo.cod, tipo: (accion === 'borrar' ? 'BORRAR' : 'AJUSTAR'), conteo_id: conteo.id, motivo: motivo };
+          var body = { token: SESION.token, codigo: conteo.cod, tipo: (accion === 'borrar' ? 'BORRAR' : 'EDITAR'), conteo_id: conteo.id, motivo: motivo };
           if (accion === 'editar') body.valor_nuevo = Number($('editCant' + id).value) || conteo.cant;
           api('solicitud-crear', body).then(function(res){
             if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo enviar'); return; }
