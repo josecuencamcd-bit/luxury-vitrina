@@ -987,6 +987,28 @@ header.top p{color:var(--ink-soft);font-size:14.5px;max-width:480px;margin:0 aut
   // una sola fila — si más adelante se necesita registrar la cantidad formalmente, hay que
   // agregar esa columna a solicitudes_ofertas).
   var PF = null, PFPCT = null, PEDIDO_FLASH = [];
+  function fetchOfertaFlash(cod){
+    return api('oferta-flash-buscar', { token: SESION.token, codigo: cod });
+  }
+  function buscarFlash(){
+    var cod = $('pfCodigo').value.trim();
+    if (!cod) { PF = null; PFPCT = null; renderFlash(); return; }
+    if (!SESION.token) { $('pfFicha').innerHTML = vacia('Sesión no real', 'Vuelve a entrar con tu correo y clave.'); return; }
+    fetchOfertaFlash(cod).then(function(res){
+      if (!res.ok) {
+        PF = null; PFPCT = null;
+        $('pfFicha').innerHTML = vacia('Error', (res.data && res.data.error) || 'No se pudo conectar con el servidor.');
+        return;
+      }
+      PF = res.data; PFPCT = null;
+      renderFlash();
+    }).catch(function(){
+      PF = null; PFPCT = null;
+      $('pfFicha').innerHTML = vacia('Error', 'No se pudo conectar con el servidor.');
+    });
+  }
+  $('pfCodigo').addEventListener('change', buscarFlash);
+  $('pfCodigo').addEventListener('keydown', function(e){ if (e.key === 'Enter') { e.preventDefault(); buscarFlash(); } });
   function renderFlash(){
     var el = $('pfFicha');
     if (!PF) { el.innerHTML = vacia('Ingresa un código', 'Prueba con 100052, 100053 o 103050.'); return; }
