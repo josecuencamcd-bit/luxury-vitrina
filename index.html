@@ -387,8 +387,9 @@ body{
 
           <div class="admCard" style="border-color:var(--warn, #c0392b)">
             <div class="lbl" style="margin-top:0;color:var(--warn, #c0392b)">Cierre de inventario</div>
-            <div style="font-size:11.5px;color:var(--ink-soft)">Guarda una copia de todo lo contado, deja las hojas de conteo en cero para el siguiente inventario, y envía el resumen por WhatsApp. No se puede deshacer.</div>
+            <div style="font-size:11.5px;color:var(--ink-soft)">Guarda una copia de todo lo contado y envía el resumen por WhatsApp. El conteo queda BLOQUEADO (nadie puede seguir contando) hasta que presiones "Nuevo inventario". No se puede deshacer.</div>
             <button class="btn" id="adCerrarInventario" style="margin-top:8px;background:var(--warn, #c0392b);border-color:var(--warn, #c0392b)">🧾 Cerrar inventario ahora</button>
+            <button class="ghost" id="adNuevoInventario" style="margin-top:8px;border-style:solid;border-color:var(--ok);color:var(--ok)">🆕 Nuevo inventario (borra lo contado y desbloquea)</button>
           </div>
 
           <div class="admCard">
@@ -495,9 +496,7 @@ body{
   pintarCambio();
 
   // ---- Ingreso ----
-  // Login real contra Supabase (auth-login). El resto de la vitrina sigue mostrando datos
-  // de ejemplo, pero necesitamos una sesión real para que Promo Flash pueda llamar a las
-  // Edge Functions de verdad.
+  // Login real contra Supabase (auth-login).
   $('bEntrar').addEventListener('click', function(){
     var correo = ($('lCorreo').value || '').trim();
     var clave = $('lClave').value || '';
@@ -510,6 +509,12 @@ body{
       $('vLogin').hidden = true;
       $('vApp').hidden = false;
       toast('Bienvenido, ' + (SESION.perfil ? SESION.perfil.nombre : ''));
+      // Carga lo que ya contaste hoy (si vuelves a entrar o recargas la
+      // página, antes esto quedaba en blanco aunque ya hubieras contado).
+      cargarMisConteos(function(filas){
+        MIS_CONTEOS = filas.filter(function(c){ return c.fecha === HOY; });
+        renderResumenInv();
+      });
     }).catch(function(){
       $('bEntrar').disabled = false;
       toast('No se pudo conectar con el servidor. Revisa tu conexión.');
@@ -545,7 +550,7 @@ body{
   });
 
   // ---- Mis conteos por día (ver / editar / borrar con flujo de aprobación) ----
-  var HOY = '2026-10-21';
+  var HOY = new Date().toISOString().slice(0, 10);
   // ---- Inventario: CONECTADO DE VERDAD ----
   // Guardar -> conteo-registrar (el servidor calcula la diferencia contra el
   // stock real de productos). Ver mis conteos -> conteo-mis-conteos (lista
@@ -848,6 +853,20 @@ body{
     }).catch(function(){ if (btn) btn.disabled = false; if (waWin) waWin.close(); toast('No se pudo conectar con el servidor.'); });
   }
   if ($('adCerrarInventario')) $('adCerrarInventario').onclick = cerrarInventarioReal;
+
+  function nuevoInventarioReal(){
+    if (!SESION.token) { toast('Tu sesión no es real.'); return; }
+    if (!confirm('¿Iniciar un inventario nuevo? Se borra todo lo contado (ya quedó respaldado en el último cierre) y se desbloquea el conteo para el equipo. No se puede deshacer.')) return;
+    var btn = $('adNuevoInventario'); if (btn) btn.disabled = true;
+    api('admin-nuevo-inventario', { token: SESION.token }).then(function(res){
+      if (btn) btn.disabled = false;
+      if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo iniciar el inventario nuevo'); return; }
+      toast('Inventario nuevo listo (' + res.data.borrados + ' conteos anteriores borrados). El equipo ya puede volver a contar.');
+      INFORME_INV = []; renderInformeInventario();
+      MIS_CONTEOS = []; renderResumenInv();
+    }).catch(function(){ if (btn) btn.disabled = false; toast('No se pudo conectar con el servidor.'); });
+  }
+  if ($('adNuevoInventario')) $('adNuevoInventario').onclick = nuevoInventarioReal;
 
   // ---- Oferta vigente: CONECTADO DE VERDAD a oferta-vigente-listar/solicitar ----
   var LISTA_OFV = [];
