@@ -610,7 +610,7 @@ body{
     $('invMisUnidades').textContent = MIS_CONTEOS.reduce(function(s,c){ return s + c.cant; }, 0);
     var ultimas = MIS_CONTEOS.slice(0, 10);
     $('invLista').innerHTML = ultimas.length ? ultimas.map(function(c){
-      var est = c.estado === 'OK' ? { txt:'CUADRA', clase:'cuadra' } : { txt:(c.diferencia > 0 ? 'SOBRA ' + c.diferencia : 'FALTA ' + (-c.diferencia)), clase:(c.diferencia > 0 ? 'sobra' : 'falta') };
+      var est = c.estado === 'CUADRA' ? { txt:'CUADRA', clase:'cuadra' } : { txt:(c.diferencia > 0 ? 'SOBRA ' + c.diferencia : 'FALTA ' + (-c.diferencia)), clase:(c.diferencia > 0 ? 'sobra' : 'falta') };
       return '<div class="filaConteo"><div class="top"><div class="info"><div class="cod">' + c.cod + '</div>' +
         '<div class="desc2">' + esc(c.desc || 'Código no encontrado') + '</div>' +
         '<div class="hora">' + c.hora + '</div></div>' +
@@ -634,7 +634,7 @@ body{
       var ahora = new Date(), hh = ('0'+ahora.getHours()).slice(-2), mm = ('0'+ahora.getMinutes()).slice(-2);
       MIS_CONTEOS.unshift({ id: d.id, fecha: d.fecha, hora: hh+':'+mm, cod: d.codigo, cant: Number(d.cantidad_contada), diferencia: Number(d.diferencia), estado: d.estado, desc: d.descripcion, created_at: d.created_at });
       renderResumenInv();
-      toast(d.estado === 'OK' ? '✔ Cuadra: ' + cod + ' × ' + cant : '⚠ Diferencia (' + d.diferencia + '): ' + cod + ' × ' + cant);
+      toast(d.estado === 'CUADRA' ? '✔ Cuadra: ' + cod + ' × ' + cant : '⚠ Diferencia (' + d.diferencia + '): ' + cod + ' × ' + cant);
       $('invCodigo').value = ''; $('invCantidad').value = ''; $('invFicha').innerHTML = vacia('Ingresa un código', 'Escanea o escribe el código del producto.'); $('invCodigo').focus();
     }).catch(function(){ $('invGuardar').disabled = false; toast('No se pudo conectar con el servidor.'); });
   };
@@ -826,7 +826,7 @@ body{
     var el = $('adConteoEquipo');
     if (!filas.length) { el.innerHTML = vacia('Sin conteos', 'Nada con esos filtros.'); return; }
     el.innerHTML = filas.map(function(c){
-      var est = c.estado === 'OK' ? { txt:'CUADRA', clase:'cuadra' } : { txt:(c.diferencia > 0 ? 'SOBRA ' + c.diferencia : 'FALTA ' + (-c.diferencia)), clase:(c.diferencia > 0 ? 'sobra' : 'falta') };
+      var est = c.estado === 'CUADRA' ? { txt:'CUADRA', clase:'cuadra' } : { txt:(c.diferencia > 0 ? 'SOBRA ' + c.diferencia : 'FALTA ' + (-c.diferencia)), clase:(c.diferencia > 0 ? 'sobra' : 'falta') };
       return '<div class="filaConteo compacta" data-fila="' + c.id + '">' +
         '<div class="top"><div class="info"><div class="cod">' + c.cod + '</div>' +
         '<div class="desc2">' + esc(c.desc || 'Código no encontrado') + '</div>' +
