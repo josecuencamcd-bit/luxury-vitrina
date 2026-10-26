@@ -1436,12 +1436,18 @@ body{
         b.onclick = function(){
           var id = b.getAttribute('data-sol-id');
           var accion = b.getAttribute('data-sol-accion');
-          b.disabled = true;
+          var tarjeta = el.querySelector('.solAdmin[data-sol="' + id + '"]');
+          Array.prototype.forEach.call(tarjeta.querySelectorAll('button'), function(x){ x.disabled = true; });
           api('solicitud-resolver', { token: SESION.token, id: id, decision: accion === 'aprobar' ? 'APLICADO' : 'RECHAZADO' }).then(function(r2){
-            if (!r2.ok) { toast(r2.data && r2.data.error ? r2.data.error : 'No se pudo resolver'); b.disabled = false; return; }
+            if (!r2.ok) { toast(r2.data && r2.data.error ? r2.data.error : 'No se pudo resolver'); Array.prototype.forEach.call(tarjeta.querySelectorAll('button'), function(x){ x.disabled = false; }); return; }
             toast(accion === 'aprobar' ? 'Solicitud aprobada' : 'Solicitud rechazada');
-            renderSolicitudesConteo();
-          });
+            // Saca la tarjeta al toque, sin esperar a recargar todo el listado.
+            SOLICITUDES_PENDIENTES = SOLICITUDES_PENDIENTES.filter(function(s){ return String(s.id) !== id; });
+            tarjeta.remove();
+            renderAdminResumen();
+            if (!SOLICITUDES_PENDIENTES.length) { el.innerHTML = '<div class="vacia" style="padding:14px 10px"><b>Sin solicitudes pendientes</b></div>'; }
+            cargarConteosEquipo();
+          }).catch(function(){ toast('No se pudo conectar con el servidor.'); Array.prototype.forEach.call(tarjeta.querySelectorAll('button'), function(x){ x.disabled = false; }); });
         };
       });
     });
