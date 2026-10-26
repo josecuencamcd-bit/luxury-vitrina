@@ -373,6 +373,17 @@ body{
           </div>
 
           <div class="admCard">
+            <div class="lbl" style="margin-top:0">Conteos del equipo — días anteriores</div>
+            <div style="font-size:11.5px;color:var(--ink-soft)">Elige colaborador y día para ver sus líneas contadas y modificarlas o borrarlas directamente.</div>
+            <div class="cambioRow" style="margin-top:8px">
+              <div style="flex:1"><div class="lbl" style="margin-top:0">Colaborador</div><select class="inp" id="adConteoColab"><option value="">Todos</option></select></div>
+              <div style="flex:1"><div class="lbl" style="margin-top:0">Día</div><select class="inp" id="adConteoDia"><option value="">Todos</option></select></div>
+            </div>
+            <input class="inp" id="adConteoBuscar" placeholder="Filtrar por código" style="margin-top:8px">
+            <div id="adConteoEquipo" style="margin-top:8px"></div>
+          </div>
+
+          <div class="admCard">
             <div class="lbl" style="margin-top:0">Informe de inventario</div>
             <select class="inp" id="infFiltro">
               <option value="TODOS">Todos</option>
@@ -538,7 +549,7 @@ body{
   function mostrar(id){
     paneles.forEach(function(p){ $(p).hidden = (p !== id); });
     if (id === 'pOf') renderLista($('ofBuscar').value);
-    if (id === 'pAdmin') { cargarConfigAdmin(); renderAdminBusqueda(); renderReportesAdmin(); renderSolicitudesConteo(); renderActividadAdmin(); renderAdminResumen(); renderInformeInventario(); }
+    if (id === 'pAdmin') { cargarConfigAdmin(); renderAdminBusqueda(); renderReportesAdmin(); renderSolicitudesConteo(); renderActividadAdmin(); renderAdminResumen(); renderInformeInventario(); cargarConteosEquipo(); }
     if (id === 'pAgente') { if (!agIniciado) iniciarAgente(); $('agInput').focus(); }
   }
   document.querySelectorAll('.tabbar button').forEach(function(b){
@@ -774,6 +785,98 @@ body{
   $('agInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') enviarAgente(); });
 
   // (renderSolicitudesConteo real está más abajo, junto al resto del Admin conectado)
+
+  // ---- Conteos del equipo (admin): ve y corrige el conteo de CUALQUIER
+  // colaborador en CUALQUIER día, directo (sin pasar por la cola de
+  // solicitudes, porque el admin ya es quien aprueba). Usa
+  // admin-conteos-equipo para listar y admin-conteo-aplicar para
+  // modificar/borrar. ----
+  var CONTEOS_EQUIPO = [];
+  function cargarConteosEquipo(){
+    var el = $('adConteoEquipo');
+    if (!SESION.token) { if (el) el.innerHTML = vacia('Sesión no real', ''); return; }
+    if (el) el.innerHTML = '<div class="vacia">Cargando…</div>';
+    api('admin-conteos-equipo', { token: SESION.token }).then(function(res){
+      if (!res.ok) { if (el) el.innerHTML = vacia('Error', (res.data && res.data.error) || 'No se pudo cargar'); return; }
+      CONTEOS_EQUIPO = (res.data.data || []).map(function(c){
+        return { id: c.id, fecha: c.fecha, hora: horaDe(c.created_at), cod: c.codigo, cant: Number(c.cantidad_contada), diferencia: Number(c.diferencia), estado: c.estado, desc: c.descripcion, colaborador: c.colaborador || '(sin nombre)' };
+      });
+      renderSelectsConteoEquipo();
+      renderConteosEquipo();
+    });
+  }
+  function renderSelectsConteoEquipo(){
+    var colabs = CONTEOS_EQUIPO.map(function(c){ return c.colaborador; }).filter(function(v, i, arr){ return arr.indexOf(v) === i; }).sort();
+    var selColab = $('adConteoColab'), valColab = selColab.value;
+    selColab.innerHTML = '<option value="">Todos</option>' + colabs.map(function(c){ return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
+    if (colabs.indexOf(valColab) !== -1) selColab.value = valColab;
+
+    var dias = CONTEOS_EQUIPO
+      .filter(function(c){ return !selColab.value || c.colaborador === selColab.value; })
+      .map(function(c){ return c.fecha; }).filter(function(v, i, arr){ return arr.indexOf(v) === i; }).sort().reverse();
+    var selDia = $('adConteoDia'), valDia = selDia.value;
+    selDia.innerHTML = '<option value="">Todos</option>' + dias.map(function(f){ return '<option value="' + f + '">' + fechaLegible(f) + '</option>'; }).join('');
+    if (dias.indexOf(valDia) !== -1) selDia.value = valDia;
+  }
+  function renderConteosEquipo(){
+    var colab = $('adConteoColab').value, dia = $('adConteoDia').value, buscado = ($('adConteoBuscar').value || '').trim();
+    var filas = CONTEOS_EQUIPO.filter(function(c){
+      return (!colab || c.colaborador === colab) && (!dia || c.fecha === dia) && (!buscado || c.cod.indexOf(buscado) !== -1);
+    }).slice(0, 150);
+    var el = $('adConteoEquipo');
+    if (!filas.length) { el.innerHTML = vacia('Sin conteos', 'Nada con esos filtros.'); return; }
+    el.innerHTML = filas.map(function(c){
+      var est = c.estado === 'OK' ? { txt:'CUADRA', clase:'cuadra' } : { txt:(c.diferencia > 0 ? 'SOBRA ' + c.diferencia : 'FALTA ' + (-c.diferencia)), clase:(c.diferencia > 0 ? 'sobra' : 'falta') };
+      return '<div class="filaConteo compacta" data-fila="' + c.id + '">' +
+        '<div class="top"><div class="info"><div class="cod">' + c.cod + '</div>' +
+        '<div class="desc2">' + esc(c.desc || 'Código no encontrado') + '</div>' +
+        '<div class="hora">' + esc(c.colaborador) + ' · ' + fechaLegible(c.fecha) + ' ' + c.hora + '</div></div>' +
+        '<div class="cant">' + c.cant + '</div></div>' +
+        '<div class="estadoConteo ' + est.clase + '" style="margin-top:5px;padding:4px;font-size:10px">' + est.txt + '</div>' +
+        '<div class="acciones">' +
+          '<button data-accion="editar" data-id="' + c.id + '">✏️ Modificar</button>' +
+          '<button class="danger" data-accion="borrar" data-id="' + c.id + '">🗑️ Borrar</button>' +
+        '</div><div class="motivoWrap"></div></div>';
+    }).join('');
+
+    Array.prototype.forEach.call(el.querySelectorAll('[data-accion]'), function(b){
+      b.onclick = function(){
+        var id = b.getAttribute('data-id');
+        var accion = b.getAttribute('data-accion');
+        var conteo = filas.filter(function(c){ return String(c.id) === id; })[0];
+        var wrap = el.querySelector('.filaConteo[data-fila="' + id + '"] .motivoWrap');
+        if (accion === 'borrar') {
+          if (!confirm('¿Borrar el conteo de ' + conteo.cod + ' (' + conteo.cant + ' unid., de ' + conteo.colaborador + ')? No se puede deshacer.')) return;
+          api('admin-conteo-aplicar', { token: SESION.token, conteo_id: id, accion: 'BORRAR' }).then(function(res){
+            if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo borrar'); return; }
+            toast('Conteo borrado');
+            CONTEOS_EQUIPO = CONTEOS_EQUIPO.filter(function(c){ return String(c.id) !== id; });
+            renderSelectsConteoEquipo();
+            renderConteosEquipo();
+          }).catch(function(){ toast('No se pudo conectar con el servidor.'); });
+          return;
+        }
+        wrap.innerHTML = '<div class="motivoBox"><div class="lbl" style="margin-top:0">Nueva cantidad</div>' +
+          '<input class="inp" id="adEditCant' + id + '" inputmode="numeric" value="' + conteo.cant + '" style="margin-bottom:6px">' +
+          '<div class="motivoRow"><button class="enviar" id="adEnvSol' + id + '">Guardar</button>' +
+          '<button class="cancelar" id="adCancSol' + id + '">Cancelar</button></div></div>';
+        $('adEnvSol' + id).onclick = function(){
+          var nuevo = Number($('adEditCant' + id).value);
+          if (!Number.isFinite(nuevo) || nuevo < 0) { toast('Cantidad inválida'); return; }
+          api('admin-conteo-aplicar', { token: SESION.token, conteo_id: id, accion: 'AJUSTAR', valor_nuevo: nuevo }).then(function(res){
+            if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo guardar'); return; }
+            toast('Conteo actualizado a ' + nuevo);
+            wrap.innerHTML = '';
+            cargarConteosEquipo();
+          }).catch(function(){ toast('No se pudo conectar con el servidor.'); });
+        };
+        $('adCancSol' + id).onclick = function(){ wrap.innerHTML = ''; };
+      };
+    });
+  }
+  $('adConteoColab').addEventListener('change', function(){ renderSelectsConteoEquipo(); renderConteosEquipo(); });
+  $('adConteoDia').addEventListener('change', renderConteosEquipo);
+  $('adConteoBuscar').addEventListener('input', renderConteosEquipo);
 
   // ---- Informe de inventario: CONECTADO DE VERDAD (usa admin-estadisticas,
   // misma llamada que "Actividad del equipo" — por eso se dispara desde el
