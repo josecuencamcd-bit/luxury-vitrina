@@ -374,13 +374,20 @@ body{
 
           <div class="admCard">
             <div class="lbl" style="margin-top:0">Conteos del equipo — días anteriores</div>
-            <div style="font-size:11.5px;color:var(--ink-soft)">Elige colaborador y día para ver sus líneas contadas y modificarlas o borrarlas directamente.</div>
+            <div style="font-size:11.5px;color:var(--ink-soft)">Elige colaborador y/o día para ver sus líneas contadas y modificarlas o borrarlas. Vacío = no muestra nada.</div>
             <div class="cambioRow" style="margin-top:8px">
-              <div style="flex:1"><div class="lbl" style="margin-top:0">Colaborador</div><select class="inp" id="adConteoColab"><option value="">Todos</option></select></div>
-              <div style="flex:1"><div class="lbl" style="margin-top:0">Día</div><select class="inp" id="adConteoDia"><option value="">Todos</option></select></div>
+              <div style="flex:1"><div class="lbl" style="margin-top:0">Colaborador</div><select class="inp" id="adConteoColab"><option value="">— Elegir —</option><option value="TODOS">Todos</option></select></div>
+              <div style="flex:1"><div class="lbl" style="margin-top:0">Día</div><select class="inp" id="adConteoDia"><option value="">— Elegir —</option><option value="TODOS">Todos</option></select></div>
             </div>
-            <input class="inp" id="adConteoBuscar" placeholder="Filtrar por código" style="margin-top:8px">
+            <input class="inp" id="adConteoBuscar" placeholder="O busca directo por código" style="margin-top:8px">
             <div id="adConteoEquipo" style="margin-top:8px"></div>
+          </div>
+
+          <div class="admCard">
+            <div class="lbl" style="margin-top:0">Avance de inventario</div>
+            <div id="adAvanceResumen" class="vacia">Cargando…</div>
+            <button class="ghost" id="adVerPendientes" style="border-style:solid;margin-top:8px;display:none">Ver pendientes por contar</button>
+            <div id="adPendientesLista" style="margin-top:8px"></div>
           </div>
 
           <div class="admCard">
@@ -549,7 +556,7 @@ body{
   function mostrar(id){
     paneles.forEach(function(p){ $(p).hidden = (p !== id); });
     if (id === 'pOf') renderLista($('ofBuscar').value);
-    if (id === 'pAdmin') { cargarConfigAdmin(); renderAdminBusqueda(); renderReportesAdmin(); renderSolicitudesConteo(); renderActividadAdmin(); renderAdminResumen(); renderInformeInventario(); cargarConteosEquipo(); }
+    if (id === 'pAdmin') { cargarConfigAdmin(); renderAdminBusqueda(); renderReportesAdmin(); renderSolicitudesConteo(); renderActividadAdmin(); renderAdminResumen(); renderInformeInventario(); renderConteosEquipoVacio(); cargarAvanceInventario(); }
     if (id === 'pAgente') { if (!agIniciado) iniciarAgente(); $('agInput').focus(); }
   }
   document.querySelectorAll('.tabbar button').forEach(function(b){
@@ -790,14 +797,35 @@ body{
   // colaborador en CUALQUIER día, directo (sin pasar por la cola de
   // solicitudes, porque el admin ya es quien aprueba). Usa
   // admin-conteos-equipo para listar y admin-conteo-aplicar para
-  // modificar/borrar. ----
-  var CONTEOS_EQUIPO = [];
+  // modificar/borrar.
+  // v2 (26/10): antes se cargaba TODO (miles de filas) apenas se abría el
+  // tab Admin y se mostraba de una, alargando mucho la pantalla y haciendo
+  // lenta la carga. Ahora no trae nada ni muestra nada hasta que el admin
+  // elige un filtro (colaborador, día o código) -- selects vacíos = pantalla
+  // limpia, "Todos" es una elección explícita. ----
+  var CONTEOS_EQUIPO = null; // null = todavía no se pidió al servidor
+  function renderConteosEquipoVacio(){
+    CONTEOS_EQUIPO = null;
+    $('adConteoColab').innerHTML = '<option value="">— Elegir —</option><option value="TODOS">Todos</option>';
+    $('adConteoDia').innerHTML = '<option value="">— Elegir —</option><option value="TODOS">Todos</option>';
+    $('adConteoBuscar').value = '';
+    $('adConteoEquipo').innerHTML = '';
+  }
+  function hayFiltroConteoEquipo(){
+    return !!$('adConteoColab').value || !!$('adConteoDia').value || !!($('adConteoBuscar').value || '').trim();
+  }
+  function conteoEquipoCambio(){
+    if (!hayFiltroConteoEquipo()) { $('adConteoEquipo').innerHTML = ''; return; }
+    if (CONTEOS_EQUIPO === null) { cargarConteosEquipo(); return; }
+    renderSelectsConteoEquipo();
+    renderConteosEquipo();
+  }
   function cargarConteosEquipo(){
     var el = $('adConteoEquipo');
-    if (!SESION.token) { if (el) el.innerHTML = vacia('Sesión no real', ''); return; }
-    if (el) el.innerHTML = '<div class="vacia">Cargando…</div>';
+    if (!SESION.token) { el.innerHTML = vacia('Sesión no real', ''); return; }
+    el.innerHTML = '<div class="vacia">Cargando…</div>';
     api('admin-conteos-equipo', { token: SESION.token }).then(function(res){
-      if (!res.ok) { if (el) el.innerHTML = vacia('Error', (res.data && res.data.error) || 'No se pudo cargar'); return; }
+      if (!res.ok) { el.innerHTML = vacia('Error', (res.data && res.data.error) || 'No se pudo cargar'); return; }
       CONTEOS_EQUIPO = (res.data.data || []).map(function(c){
         return { id: c.id, fecha: c.fecha, hora: horaDe(c.created_at), cod: c.codigo, cant: Number(c.cantidad_contada), diferencia: Number(c.diferencia), estado: c.estado, desc: c.descripcion, colaborador: c.colaborador || '(sin nombre)' };
       });
@@ -806,22 +834,23 @@ body{
     });
   }
   function renderSelectsConteoEquipo(){
-    var colabs = CONTEOS_EQUIPO.map(function(c){ return c.colaborador; }).filter(function(v, i, arr){ return arr.indexOf(v) === i; }).sort();
+    var colabs = (CONTEOS_EQUIPO || []).map(function(c){ return c.colaborador; }).filter(function(v, i, arr){ return arr.indexOf(v) === i; }).sort();
     var selColab = $('adConteoColab'), valColab = selColab.value;
-    selColab.innerHTML = '<option value="">Todos</option>' + colabs.map(function(c){ return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
-    if (colabs.indexOf(valColab) !== -1) selColab.value = valColab;
+    selColab.innerHTML = '<option value="">— Elegir —</option><option value="TODOS">Todos</option>' + colabs.map(function(c){ return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
+    if (colabs.indexOf(valColab) !== -1 || valColab === 'TODOS') selColab.value = valColab;
 
-    var dias = CONTEOS_EQUIPO
-      .filter(function(c){ return !selColab.value || c.colaborador === selColab.value; })
+    var dias = (CONTEOS_EQUIPO || [])
+      .filter(function(c){ return !selColab.value || selColab.value === 'TODOS' || c.colaborador === selColab.value; })
       .map(function(c){ return c.fecha; }).filter(function(v, i, arr){ return arr.indexOf(v) === i; }).sort().reverse();
     var selDia = $('adConteoDia'), valDia = selDia.value;
-    selDia.innerHTML = '<option value="">Todos</option>' + dias.map(function(f){ return '<option value="' + f + '">' + fechaLegible(f) + '</option>'; }).join('');
-    if (dias.indexOf(valDia) !== -1) selDia.value = valDia;
+    selDia.innerHTML = '<option value="">— Elegir —</option><option value="TODOS">Todos</option>' + dias.map(function(f){ return '<option value="' + f + '">' + fechaLegible(f) + '</option>'; }).join('');
+    if (dias.indexOf(valDia) !== -1 || valDia === 'TODOS') selDia.value = valDia;
   }
   function renderConteosEquipo(){
+    if (!hayFiltroConteoEquipo()) { $('adConteoEquipo').innerHTML = ''; return; }
     var colab = $('adConteoColab').value, dia = $('adConteoDia').value, buscado = ($('adConteoBuscar').value || '').trim();
-    var filas = CONTEOS_EQUIPO.filter(function(c){
-      return (!colab || c.colaborador === colab) && (!dia || c.fecha === dia) && (!buscado || c.cod.indexOf(buscado) !== -1);
+    var filas = (CONTEOS_EQUIPO || []).filter(function(c){
+      return (!colab || colab === 'TODOS' || c.colaborador === colab) && (!dia || dia === 'TODOS' || c.fecha === dia) && (!buscado || c.cod.indexOf(buscado) !== -1);
     }).slice(0, 150);
     var el = $('adConteoEquipo');
     if (!filas.length) { el.innerHTML = vacia('Sin conteos', 'Nada con esos filtros.'); return; }
@@ -874,9 +903,9 @@ body{
       };
     });
   }
-  $('adConteoColab').addEventListener('change', function(){ renderSelectsConteoEquipo(); renderConteosEquipo(); });
-  $('adConteoDia').addEventListener('change', renderConteosEquipo);
-  $('adConteoBuscar').addEventListener('input', renderConteosEquipo);
+  $('adConteoColab').addEventListener('change', function(){ if (CONTEOS_EQUIPO !== null) renderSelectsConteoEquipo(); conteoEquipoCambio(); });
+  $('adConteoDia').addEventListener('change', conteoEquipoCambio);
+  $('adConteoBuscar').addEventListener('input', conteoEquipoCambio);
 
   // ---- Informe de inventario: CONECTADO DE VERDAD (usa admin-estadisticas,
   // misma llamada que "Actividad del equipo" — por eso se dispara desde el
@@ -1446,12 +1475,46 @@ body{
             tarjeta.remove();
             renderAdminResumen();
             if (!SOLICITUDES_PENDIENTES.length) { el.innerHTML = '<div class="vacia" style="padding:14px 10px"><b>Sin solicitudes pendientes</b></div>'; }
-            cargarConteosEquipo();
+            if (CONTEOS_EQUIPO !== null) cargarConteosEquipo();
           }).catch(function(){ toast('No se pudo conectar con el servidor.'); Array.prototype.forEach.call(tarjeta.querySelectorAll('button'), function(x){ x.disabled = false; }); });
         };
       });
     });
   }
+
+  // ---- Avance de inventario: % de códigos ya contados vs. total, y lista
+  // de pendientes por contar (colapsada por defecto, se despliega con el
+  // botón para no alargar la pantalla). Usa admin-avance-inventario. ----
+  var AVANCE_PENDIENTES = [];
+  function cargarAvanceInventario(){
+    var el = $('adAvanceResumen');
+    if (!SESION.token) { el.innerHTML = vacia('Sesión no real', ''); return; }
+    el.className = 'vacia'; el.innerHTML = 'Cargando…';
+    $('adPendientesLista').innerHTML = '';
+    $('adVerPendientes').style.display = 'none';
+    api('admin-avance-inventario', { token: SESION.token }).then(function(res){
+      if (!res.ok) { el.innerHTML = vacia('Error', (res.data && res.data.error) || 'No se pudo cargar'); return; }
+      AVANCE_PENDIENTES = res.data.pendientes || [];
+      el.className = '';
+      el.innerHTML = '<div class="repConteo" style="margin-top:0">' +
+        '<div><b>' + res.data.porcentaje + '%</b><span>Avance</span></div>' +
+        '<div><b>' + res.data.contados + '</b><span>Contados</span></div>' +
+        '<div><b>' + res.data.pendientes_count + '</b><span>Pendientes</span></div>' +
+      '</div>';
+      if (res.data.pendientes_count > 0) {
+        $('adVerPendientes').style.display = '';
+        $('adVerPendientes').textContent = 'Ver pendientes por contar (' + res.data.pendientes_count + ')';
+      }
+    }).catch(function(){ el.innerHTML = vacia('Error', 'No se pudo conectar con el servidor.'); });
+  }
+  $('adVerPendientes').onclick = function(){
+    var el = $('adPendientesLista');
+    if (el.innerHTML) { el.innerHTML = ''; $('adVerPendientes').textContent = 'Ver pendientes por contar (' + AVANCE_PENDIENTES.length + ')'; return; }
+    el.innerHTML = AVANCE_PENDIENTES.slice(0, 300).map(function(p){
+      return '<div class="fila"><div class="info"><div class="cod">' + p.codigo + ' · ' + esc(p.oficina||'') + '</div><div class="desc2">' + esc(p.descripcion) + '</div></div></div>';
+    }).join('') + (AVANCE_PENDIENTES.length > 300 ? '<div class="vacia">… y ' + (AVANCE_PENDIENTES.length - 300) + ' más. Descarga el informe para ver todos.</div>' : '');
+    $('adVerPendientes').textContent = 'Ocultar pendientes';
+  };
 
   // ---- Reportes: sin stock / venta perdida, enviados por correo ----
   function renderReportesAdmin(){
