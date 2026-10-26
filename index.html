@@ -386,8 +386,9 @@ header.top p{color:var(--ink-soft);font-size:14.5px;max-width:480px;margin:0 aut
 
           <div class="admCard" style="border-color:var(--warn, #c0392b)">
             <div class="lbl" style="margin-top:0;color:var(--warn, #c0392b)">Cierre de inventario</div>
-            <div style="font-size:11.5px;color:var(--ink-soft)">Guarda una copia de todo lo contado, deja las hojas de conteo en cero para el siguiente inventario, y envía el resumen por WhatsApp. No se puede deshacer.</div>
-            <button class="btn" id="adCerrarInventario" style="margin-top:8px;background:var(--warn, #c0392b);border-color:var(--warn, #c0392b)">🧾 Cerrar inventario ahora</button>
+            <div style="font-size:11.5px;color:var(--ink-soft)">Paso 1: guarda una copia de todo lo contado (Excel + Supabase), arma el resumen por WhatsApp/correo, y BLOQUEA el conteo. Paso 2: cuando quieras arrancar el inventario nuevo, presiona "Nuevo inventario" — ahí recién se borra lo contado.</div>
+            <button class="btn" id="adCerrarInventario" style="margin-top:8px;background:var(--warn, #c0392b);border-color:var(--warn, #c0392b)">🧾 Cerrar inventario (paso 1)</button>
+            <button class="btn" id="adNuevoInventario" style="margin-top:8px;background:var(--ok, #2e7d32);border-color:var(--ok, #2e7d32)">🔄 Nuevo inventario (paso 2)</button>
           </div>
 
           <div class="admCard">
@@ -834,24 +835,36 @@ header.top p{color:var(--ink-soft);font-size:14.5px;max-width:480px;margin:0 aut
   // eso pide confirmación explícita antes de llamar al servidor. ----
   function cerrarInventarioReal(){
     if (!SESION.token) { toast('Tu sesión no es real.'); return; }
-    if (!confirm('¿Cerrar el inventario ahora? Se guarda una copia de todo lo contado y las hojas de conteo quedan en CERO para el siguiente inventario. Esto no se puede deshacer.')) return;
+    if (!confirm('¿Cerrar el inventario (paso 1)? Se guarda una copia de todo lo contado y se bloquea el conteo hasta que presiones "Nuevo inventario". Esto no se puede deshacer.')) return;
     var btn = $('adCerrarInventario'); if (btn) btn.disabled = true;
     api('admin-cerrar-inventario', { token: SESION.token }).then(function(res){
       if (btn) btn.disabled = false;
       if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo cerrar el inventario'); return; }
       var d = res.data;
-      toast('Cierre guardado (' + d.total_filas + ' filas). Abriendo WhatsApp…');
+      toast('Cierre guardado (' + d.total_filas + ' filas). Conteo bloqueado. Abriendo WhatsApp…');
       window.open(d.url, '_blank', 'noopener'); if (d.mailUrl) { setTimeout(function(){ window.open(d.mailUrl, '_blank', 'noopener'); }, 400); } else if (d.sinCorreo) { toast('Falta configurar el correo de cierre en CONFIG APP.'); }
       var blob = new Blob(['﻿' + d.csv], { type: 'text/csv;charset=utf-8;' });
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob); a.download = 'cierre_inventario_' + HOY + '.csv';
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      // Deja la planilla de la pantalla en blanco (ya no hay conteos) y refresca el informe.
+    }).catch(function(){ if (btn) btn.disabled = false; toast('No se pudo conectar con el servidor.'); });
+  }
+  if ($('adCerrarInventario')) $('adCerrarInventario').onclick = cerrarInventarioReal;
+
+  function nuevoInventarioReal(){
+    if (!SESION.token) { toast('Tu sesión no es real.'); return; }
+    if (!confirm('¿Iniciar un nuevo inventario (paso 2)? Esto borra definitivamente todo lo contado por los colaboradores y desbloquea el conteo. Esto no se puede deshacer.')) return;
+    var btn = $('adNuevoInventario'); if (btn) btn.disabled = true;
+    api('admin-nuevo-inventario', { token: SESION.token }).then(function(res){
+      if (btn) btn.disabled = false;
+      if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo iniciar el nuevo inventario'); return; }
+      var d = res.data;
+      toast('Nuevo inventario iniciado (' + d.borrados + ' conteo(s) borrados). Conteo desbloqueado.');
       INFORME_INV = []; renderInformeInventario();
       if (SESION.token) { cargarMisConteos(function(){}); }
     }).catch(function(){ if (btn) btn.disabled = false; toast('No se pudo conectar con el servidor.'); });
   }
-  if ($('adCerrarInventario')) $('adCerrarInventario').onclick = cerrarInventarioReal;
+  if ($('adNuevoInventario')) $('adNuevoInventario').onclick = nuevoInventarioReal;
 
   // ---- Oferta vigente: CONECTADO DE VERDAD a oferta-vigente-listar/solicitar ----
   var LISTA_OFV = [];
