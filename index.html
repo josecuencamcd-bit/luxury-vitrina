@@ -1015,7 +1015,6 @@ header.top p{color:var(--ink-soft);font-size:14.5px;max-width:480px;margin:0 aut
     if (!PF.existe) { el.innerHTML = '<div class="ficha"><div class="estado NOEXISTE">Código no existe en oferta_flash</div></div>'; return; }
     var h = '<div class="ficha"><div class="desc">' + PF.descripcion + ' <span style="color:var(--gold);font-weight:700">· FLASH</span></div>' +
       '<div class="precio"><b>' + clp(PF.precio.clp) + '</b><span>' + usd(PF.precio.usd) + ' · Precio lista · Stock ' + PF.stock + '</span></div>' +
-      (PF.alerta ? '<div class="autorizado" style="color:var(--rojo,#c62828)">⚠ ' + PF.alerta + '</div>' : '') +
       '<div class="autorizado">' + (PF.maximo > 0 ? 'Puedes negociar hasta ' + PF.maximo + '%' : 'Este producto no admite descuento') + '</div>' +
       '<div class="descs">' + PF.opciones.map(function(o){
         return '<button data-p="' + o.pct + '" class="' + (o.permitido ? (PFPCT === o.pct ? 'sel' : '') : 'no') + '"' + (o.permitido ? '' : ' disabled') + '>' +
