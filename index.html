@@ -386,9 +386,11 @@ header.top p{color:var(--ink-soft);font-size:14.5px;max-width:480px;margin:0 aut
 
           <div class="admCard" style="border-color:var(--warn, #c0392b)">
             <div class="lbl" style="margin-top:0;color:var(--warn, #c0392b)">Cierre de inventario</div>
-            <div style="font-size:11.5px;color:var(--ink-soft)">Paso 1: guarda una copia de todo lo contado (Excel + Supabase), arma el resumen por WhatsApp/correo, y BLOQUEA el conteo. Paso 2: cuando quieras arrancar el inventario nuevo, presiona "Nuevo inventario" — ahí recién se borra lo contado.</div>
-            <button class="btn" id="adCerrarInventario" style="margin-top:8px;background:var(--warn, #c0392b);border-color:var(--warn, #c0392b)">🧾 Cerrar inventario (paso 1)</button>
-            <button class="btn" id="adNuevoInventario" style="margin-top:8px;background:var(--ok, #2e7d32);border-color:var(--ok, #2e7d32)">🔄 Nuevo inventario (paso 2)</button>
+            <div style="font-size:11px;color:var(--ink-soft)">Paso 1 respalda y bloquea el conteo. Paso 2 borra lo contado y lo desbloquea.</div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn" id="adCerrarInventario" style="margin-top:0;font-size:12px;padding:9px 6px;background:var(--warn, #c0392b);border-color:var(--warn, #c0392b)">🧾 Cerrar (paso 1)</button>
+              <button class="btn" id="adNuevoInventario" style="margin-top:0;font-size:12px;padding:9px 6px;background:var(--ok, #2e7d32);border-color:var(--ok, #2e7d32)">🔄 Nuevo inv. (paso 2)</button>
+            </div>
           </div>
 
           <div class="admCard">
