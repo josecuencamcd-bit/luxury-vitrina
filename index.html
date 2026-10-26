@@ -841,7 +841,7 @@ header.top p{color:var(--ink-soft);font-size:14.5px;max-width:480px;margin:0 aut
       if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo cerrar el inventario'); return; }
       var d = res.data;
       toast('Cierre guardado (' + d.total_filas + ' filas). Abriendo WhatsApp…');
-      window.open(d.url, '_blank', 'noopener');
+      window.open(d.url, '_blank', 'noopener'); if (d.mailUrl) { setTimeout(function(){ window.open(d.mailUrl, '_blank', 'noopener'); }, 400); } else if (d.sinCorreo) { toast('Falta configurar el correo de cierre en CONFIG APP.'); }
       var blob = new Blob(['﻿' + d.csv], { type: 'text/csv;charset=utf-8;' });
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob); a.download = 'cierre_inventario_' + HOY + '.csv';
