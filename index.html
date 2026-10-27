@@ -412,7 +412,11 @@ body{
 
           <div class="admCard">
             <div class="lbl" style="margin-top:0">Reportes</div>
-            <div class="repConteo">
+            <div class="cambioRow">
+              <div style="flex:1"><div class="lbl" style="margin-top:0">Desde</div><input class="inp sm" id="repDesde" type="date"></div>
+              <div style="flex:1"><div class="lbl" style="margin-top:0">Hasta</div><input class="inp sm" id="repHasta" type="date"></div>
+            </div>
+            <div class="repConteo" style="margin-top:8px">
               <div><b id="repCantSinStock">0</b><span>Sin stock pendientes</span></div>
               <div><b id="repCantPerdida">0</b><span>Venta perdida pendientes</span></div>
             </div>
@@ -421,6 +425,7 @@ body{
               <button class="ghost sm" id="bInformeSinStock" style="margin-top:0;flex:1;min-width:0;border-style:solid;white-space:normal;font-size:10px;line-height:1.2;padding:6px 4px">Informe sin stock</button>
               <button class="ghost sm" id="bInformePerdida" style="margin-top:0;flex:1;min-width:0;border-style:solid;white-space:normal;font-size:10px;line-height:1.2;padding:6px 4px">Informe ventas perdidas</button>
             </div>
+            <div id="repLista" style="margin-top:8px"></div>
           </div>
         </main>
 
@@ -492,12 +497,6 @@ body{
   // calcula multiplicando: ars = usd × ars_por_usd (tal cual se escribe ese valor, ej. 0.5),
   // sin redondear al entero — igual que las Edge Functions reales.
   var CFG = { dolar:950, ars_por_usd:0.5, multiplicador:1.6, redondeo:10, descuentos_disponibles:[5,10,15,20,25,30], activas:true };
-  var REPORTES = [
-    { tipo:'SIN STOCK', fecha:'14/10 10:05', codigo:'100053', nombre:'PERF ARMAF CLUB DE NUIT MILESTONE 105ML UNISEX', cantidad:0, vendedor:'Jose Miguel (54)', atendido:false },
-    { tipo:'SIN STOCK', fecha:'14/10 11:20', codigo:'103052', nombre:'BOLSOS DKNY R3432C81-AI9', cantidad:1, vendedor:'Ana (12)', atendido:false },
-    { tipo:'VENTA PERDIDA', fecha:'13/10 18:40', nombre:'Perfume Carolina Herrera 212 VIP', monto:45000, vendedor:'Ana (12)', atendido:false },
-    { tipo:'VENTA PERDIDA', fecha:'13/10 19:05', nombre:'Zapatillas talla 42', monto:69900, vendedor:'Jose Miguel (54)', atendido:false }
-  ];
 
   function $(id){ return document.getElementById(id); }
   function clp(n){ return '$' + Math.round(n).toLocaleString('es-CL'); }
@@ -556,7 +555,7 @@ body{
   function mostrar(id){
     paneles.forEach(function(p){ $(p).hidden = (p !== id); });
     if (id === 'pOf') renderLista($('ofBuscar').value);
-    if (id === 'pAdmin') { cargarConfigAdmin(); renderAdminBusqueda(); renderReportesAdmin(); renderSolicitudesConteo(); renderActividadAdmin(); renderAdminResumen(); renderInformeInventario(); renderConteosEquipoVacio(); cargarAvanceInventario(); }
+    if (id === 'pAdmin') { cargarConfigAdmin(); renderAdminBusqueda(); cargarReportesAdmin(); renderSolicitudesConteo(); renderActividadAdmin(); renderAdminResumen(); renderInformeInventario(); renderConteosEquipoVacio(); cargarAvanceInventario(); }
     if (id === 'pAgente') { if (!agIniciado) iniciarAgente(); $('agInput').focus(); }
   }
   document.querySelectorAll('.tabbar button').forEach(function(b){
@@ -1534,21 +1533,56 @@ body{
     $('adVerPendientes').textContent = 'Ocultar pendientes';
   };
 
-  // ---- Reportes: sin stock / venta perdida, enviados por correo ----
-  function renderReportesAdmin(){
-    $('repCantSinStock').textContent = REPORTES.filter(function(r){ return r.tipo === 'SIN STOCK' && !r.atendido; }).length;
-    $('repCantPerdida').textContent = REPORTES.filter(function(r){ return r.tipo === 'VENTA PERDIDA' && !r.atendido; }).length;
+  // ---- Reportes: sin stock / venta perdida, CONECTADO DE VERDAD a
+  // solicitudes_abastecimiento (admin-abastecimiento-listar), con rango de
+  // fechas (por defecto, últimos 30 días). El informe que se manda por
+  // correo toma ese mismo rango -- cambiar las fechas cambia qué entra al
+  // correo. Al mandarlo, esos registros quedan marcados ATENDIDO
+  // (admin-abastecimiento-marcar) para no repetirlos la próxima vez. ----
+  var REPORTES_REALES = [];
+  (function initFechasReportes(){
+    var hasta = new Date(HOY);
+    var desde = new Date(HOY); desde.setDate(desde.getDate() - 30);
+    $('repHasta').value = HOY;
+    $('repDesde').value = desde.toISOString().slice(0, 10);
+  })();
+  function cargarReportesAdmin(){
+    if (!SESION.token) return;
+    var desde = $('repDesde').value, hasta = $('repHasta').value;
+    api('admin-abastecimiento-listar', { token: SESION.token, desde: desde, hasta: hasta }).then(function(res){
+      if (!res.ok) { $('repLista').innerHTML = vacia('Error', (res.data && res.data.error) || 'No se pudo cargar'); return; }
+      REPORTES_REALES = res.data.data || [];
+      renderReportesAdmin();
+    });
   }
+  function renderReportesAdmin(){
+    var pendSinStock = REPORTES_REALES.filter(function(r){ return r.tipo === 'SIN STOCK' && r.estado === 'PENDIENTE'; });
+    var pendPerdida = REPORTES_REALES.filter(function(r){ return r.tipo === 'VENTA PERDIDA' && r.estado === 'PENDIENTE'; });
+    $('repCantSinStock').textContent = pendSinStock.length;
+    $('repCantPerdida').textContent = pendPerdida.length;
+    var el = $('repLista');
+    if (!REPORTES_REALES.length) { el.innerHTML = vacia('Sin reportes en ese rango', ''); return; }
+    el.innerHTML = REPORTES_REALES.map(function(r){
+      var detalle = r.tipo === 'SIN STOCK'
+        ? r.codigo + ' · ' + esc(r.nombre_descripcion) + (r.cantidad_actual != null ? ' (saldo ' + r.cantidad_actual + ')' : '')
+        : esc(r.nombre_descripcion) + (r.monto_aproximado ? ' (' + clp(r.monto_aproximado) + ')' : '');
+      return '<div class="fila"><div class="info"><div class="cod">' + (r.tipo === 'SIN STOCK' ? '📦' : '💸') + ' ' + detalle + '</div>' +
+        '<div class="desc2">' + fechaLegible(String(r.fecha).slice(0,10)) + ' · ' + esc(r.vendedor||'') + (r.estado === 'ATENDIDO' ? ' · ✔ enviado' : '') + '</div></div></div>';
+    }).join('');
+  }
+  $('repDesde').addEventListener('change', cargarReportesAdmin);
+  $('repHasta').addEventListener('change', cargarReportesAdmin);
   function enviarInforme(tipo, boton){
     var destino = $('repDestino').value.trim();
     if (!destino) { toast('Escribe el correo que recibirá el informe'); return; }
-    var pendientes = REPORTES.filter(function(r){ return r.tipo === tipo && !r.atendido; });
-    if (!pendientes.length) { toast('No hay registros pendientes de ese tipo'); return; }
-    var asunto = 'Informe ' + tipo + ' · Luxury & Design';
+    var pendientes = REPORTES_REALES.filter(function(r){ return r.tipo === tipo && r.estado === 'PENDIENTE'; });
+    if (!pendientes.length) { toast('No hay registros pendientes de ese tipo en el rango elegido'); return; }
+    var asunto = 'Informe ' + tipo + ' · ' + $('repDesde').value + ' a ' + $('repHasta').value + ' · Luxury & Design';
     var cuerpo = pendientes.map(function(r){
+      var fecha = fechaLegible(String(r.fecha).slice(0,10));
       return tipo === 'SIN STOCK'
-        ? '• ' + r.fecha + ' — ' + r.codigo + ' ' + r.nombre + ' (cant. ' + r.cantidad + ') — reportado por ' + r.vendedor
-        : '• ' + r.fecha + ' — ' + r.nombre + ' (' + clp(r.monto) + ') — reportado por ' + r.vendedor;
+        ? '• ' + fecha + ' — ' + r.codigo + ' ' + r.nombre_descripcion + ' (saldo ' + (r.cantidad_actual != null ? r.cantidad_actual : '0') + ') — reportado por ' + r.vendedor
+        : '• ' + fecha + ' — ' + r.nombre_descripcion + ' (' + clp(r.monto_aproximado || 0) + ') — reportado por ' + r.vendedor;
     }).join('\n');
     var mailto = 'mailto:' + encodeURIComponent(destino)
       + '?subject=' + encodeURIComponent(asunto)
@@ -1556,6 +1590,9 @@ body{
     // No se envía nada automático: se abre tu app de correo con el mensaje
     // ya armado para que tú lo revises y lo mandes.
     window.location.href = mailto;
+    api('admin-abastecimiento-marcar', { token: SESION.token, ids: pendientes.map(function(r){ return r.id; }) }).then(function(){
+      cargarReportesAdmin();
+    });
   }
   $('bInformeSinStock').onclick = function(){ enviarInforme('SIN STOCK'); };
   $('bInformePerdida').onclick = function(){ enviarInforme('VENTA PERDIDA'); };
