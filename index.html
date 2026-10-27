@@ -420,6 +420,7 @@ body{
               <div><b id="repCantSinStock">0</b><span>Sin stock pendientes</span></div>
               <div><b id="repCantPerdida">0</b><span>Venta perdida pendientes</span></div>
             </div>
+            <button class="ghost sm" id="repVer" style="margin-top:8px;border-style:solid">👁️ Ver lista</button>
             <input class="inp sm" id="repDestino" type="email" value="jose.cuenca.mcd@gmail.com" placeholder="Correo que recibe el informe" style="margin-top:8px">
             <div style="display:flex;gap:7px;margin-top:8px">
               <button class="ghost sm" id="bInformeSinStock" style="margin-top:0;flex:1;min-width:0;border-style:solid;white-space:normal;font-size:10px;line-height:1.2;padding:6px 4px">Informe sin stock</button>
@@ -1570,11 +1571,15 @@ body{
       renderReportesAdmin();
     });
   }
+  var REP_LISTA_ABIERTA = false; // la lista nunca se despliega sola: solo el contador
   function renderReportesAdmin(){
     var pendSinStock = REPORTES_REALES.filter(function(r){ return r.tipo === 'SIN STOCK' && r.estado === 'PENDIENTE'; });
     var pendPerdida = REPORTES_REALES.filter(function(r){ return r.tipo === 'VENTA PERDIDA' && r.estado === 'PENDIENTE'; });
     $('repCantSinStock').textContent = pendSinStock.length;
     $('repCantPerdida').textContent = pendPerdida.length;
+    if (REP_LISTA_ABIERTA) { pintarListaReportes(); } else { $('repLista').innerHTML = ''; $('repVer').textContent = '👁️ Ver lista'; }
+  }
+  function pintarListaReportes(){
     var el = $('repLista');
     if (!REPORTES_REALES.length) { el.innerHTML = vacia('Sin reportes en ese rango', ''); return; }
     el.innerHTML = REPORTES_REALES.map(function(r){
@@ -1585,6 +1590,11 @@ body{
         '<div class="desc2">' + fechaLegible(String(r.fecha).slice(0,10)) + ' · ' + esc(r.vendedor||'') + (r.estado === 'ATENDIDO' ? ' · ✔ enviado' : '') + '</div></div></div>';
     }).join('');
   }
+  $('repVer').onclick = function(){
+    REP_LISTA_ABIERTA = !REP_LISTA_ABIERTA;
+    if (REP_LISTA_ABIERTA) { pintarListaReportes(); $('repVer').textContent = 'Ocultar lista'; }
+    else { $('repLista').innerHTML = ''; $('repVer').textContent = '👁️ Ver lista'; }
+  };
   $('repDesde').addEventListener('change', cargarReportesAdmin);
   $('repHasta').addEventListener('change', cargarReportesAdmin);
   function enviarInforme(tipo, boton){
