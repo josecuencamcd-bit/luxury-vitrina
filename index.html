@@ -568,7 +568,17 @@ body{
   });
 
   // ---- Mis conteos por día (ver / editar / borrar con flujo de aprobación) ----
-  var HOY = new Date().toISOString().slice(0, 10);
+  // HOY usa la fecha LOCAL del teléfono (no UTC): toISOString() siempre da
+  // la fecha en UTC, así que después de las 21:00 hora de Punta Arenas
+  // (UTC-3) ya es "mañana" en UTC y "Lo que llevo contado" quedaba en
+  // blanco aunque el conteo sí se hubiera guardado bien con la fecha de
+  // hoy. Restar el offset de huso horario antes de cortar a YYYY-MM-DD
+  // arregla eso.
+  function fechaLocalISO(d){
+    d = d || new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  }
+  var HOY = fechaLocalISO();
   // ---- Inventario: CONECTADO DE VERDAD ----
   // Guardar -> conteo-registrar (el servidor calcula la diferencia contra el
   // stock real de productos). Ver mis conteos -> conteo-mis-conteos (lista
