@@ -655,14 +655,22 @@ body{
       $('invCodigo').value = ''; $('invCantidad').value = ''; $('invFicha').innerHTML = vacia('Ingresa un código', 'Escanea o escribe el código del producto.'); $('invCodigo').focus();
     }).catch(function(){ $('invGuardar').disabled = false; toast('No se pudo conectar con el servidor.'); });
   };
+  // Deshacer la ÚLTIMA línea propia es inmediato, sin pasar por aprobación
+  // del admin (corregir un error recién cometido no debería necesitar que
+  // alguien más lo apruebe). Solo para líneas de días anteriores se pide
+  // motivo y aprobación (eso vive en "Ver mis conteos por día").
   $('invDeshacer').onclick = function(){
     if (!MIS_CONTEOS.length) { toast('No tienes líneas para deshacer'); return; }
     var ultima = MIS_CONTEOS[0];
-    if (!confirm('¿Pedir el borrado de tu última línea guardada (' + ultima.cod + ')? Queda pendiente de aprobación del admin.')) return;
-    api('solicitud-crear', { token: SESION.token, codigo: ultima.cod, tipo: 'BORRAR', conteo_id: ultima.id, motivo: 'Deshacer inmediato (vendedor)' }).then(function(res){
-      if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo enviar la solicitud'); return; }
-      toast('Solicitud de borrado enviada — pendiente de aprobación del admin');
-    }).catch(function(){ toast('No se pudo conectar con el servidor.'); });
+    if (!confirm('¿Borrar tu última línea guardada (' + ultima.cod + ' × ' + ultima.cant + ')? No se puede deshacer.')) return;
+    var btn = $('invDeshacer'); btn.disabled = true;
+    api('conteo-deshacer', { token: SESION.token, conteo_id: ultima.id }).then(function(res){
+      btn.disabled = false;
+      if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo borrar'); return; }
+      MIS_CONTEOS.shift();
+      renderResumenInv();
+      toast('Línea borrada: ' + ultima.cod);
+    }).catch(function(){ btn.disabled = false; toast('No se pudo conectar con el servidor.'); });
   };
   renderResumenInv();
 
