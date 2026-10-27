@@ -427,6 +427,21 @@ body{
             </div>
             <div id="repLista" style="margin-top:8px"></div>
           </div>
+
+          <div class="admCard" style="border-color:var(--warn, #c0392b)">
+            <div class="lbl" style="margin-top:0;color:var(--warn, #c0392b)">Abastecimiento — Quiebres de stock</div>
+            <div style="font-size:11.5px;color:var(--ink-soft)">Detección automática: stock objetivo 6 unidades por código. Cuando un código llega a 2 unidades o menos, aparece aquí solo.</div>
+            <div class="repConteo" style="margin-top:8px">
+              <div><b id="qsCant">—</b><span>Códigos en quiebre (stock ≤ 2)</span></div>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:8px">
+              <button class="ghost sm" id="qsVer" style="margin-top:0;flex:1;min-width:0;border-style:solid">👁️ Ver lista</button>
+              <button class="ghost sm" id="qsDescargar" style="margin-top:0;flex:1;min-width:0;border-style:solid">⬇️ CSV completo</button>
+            </div>
+            <input class="inp sm" id="qsDestino" type="email" value="jose.cuenca.mcd@gmail.com" placeholder="Correo que recibe el pedido" style="margin-top:8px">
+            <button class="btn" id="qsEnviar" style="margin-top:8px">📩 Generar pedido de abastecimiento (mail)</button>
+            <div id="qsLista" style="margin-top:8px"></div>
+          </div>
         </main>
 
         <!-- Agente: chat del administrador con el bot (mismo motor que WhatsApp) -->
@@ -555,7 +570,7 @@ body{
   function mostrar(id){
     paneles.forEach(function(p){ $(p).hidden = (p !== id); });
     if (id === 'pOf') renderLista($('ofBuscar').value);
-    if (id === 'pAdmin') { cargarConfigAdmin(); renderAdminBusqueda(); cargarReportesAdmin(); renderSolicitudesConteo(); renderActividadAdmin(); renderAdminResumen(); renderInformeInventario(); renderConteosEquipoVacio(); cargarAvanceInventario(); }
+    if (id === 'pAdmin') { cargarConfigAdmin(); renderAdminBusqueda(); cargarReportesAdmin(); renderSolicitudesConteo(); renderActividadAdmin(); renderAdminResumen(); renderInformeInventario(); renderConteosEquipoVacio(); cargarAvanceInventario(); cargarQuiebresStockResumen(); }
     if (id === 'pAgente') { if (!agIniciado) iniciarAgente(); $('agInput').focus(); }
   }
   document.querySelectorAll('.tabbar button').forEach(function(b){
@@ -1596,6 +1611,67 @@ body{
   }
   $('bInformeSinStock').onclick = function(){ enviarInforme('SIN STOCK'); };
   $('bInformePerdida').onclick = function(){ enviarInforme('VENTA PERDIDA'); };
+
+  // ---- Abastecimiento: quiebres de stock, detección automática. Stock
+  // objetivo = 6 por código; en quiebre = stock <= 2. NO depende de que
+  // nadie reporte nada a mano -- se calcula directo contra productos.stock
+  // cada vez que se entra a Admin. La lista completa (puede ser cientos de
+  // códigos) nunca se despliega sola: solo el contador se ve de entrada,
+  // igual que "Avance de inventario" y "Conteos del equipo". ----
+  var QUIEBRES_STOCK = null; // null = todavía no llegó la respuesta del servidor
+  function cargarQuiebresStockResumen(){
+    if (!SESION.token) return;
+    $('qsCant').textContent = '…';
+    api('admin-quiebres-stock', { token: SESION.token }).then(function(res){
+      if (!res.ok) { QUIEBRES_STOCK = []; $('qsCant').textContent = '0'; toast((res.data && res.data.error) || 'No se pudo calcular quiebres de stock'); return; }
+      QUIEBRES_STOCK = res.data.lista || [];
+      $('qsCant').textContent = QUIEBRES_STOCK.length;
+      $('qsLista').innerHTML = '';
+      $('qsVer').textContent = '👁️ Ver lista';
+    });
+  }
+  $('qsVer').onclick = function(){
+    if (QUIEBRES_STOCK === null) { toast('Esperando el cálculo de quiebres…'); return; }
+    var el = $('qsLista');
+    if (el.innerHTML) { el.innerHTML = ''; $('qsVer').textContent = '👁️ Ver lista'; return; }
+    if (!QUIEBRES_STOCK.length) { el.innerHTML = vacia('Sin quiebres de stock', 'Todos los códigos tienen más de 2 unidades.'); return; }
+    el.innerHTML = QUIEBRES_STOCK.slice(0, 300).map(function(p){
+      return '<div class="fila"><div class="info"><div class="cod">' + p.codigo + ' · ' + esc(p.oficina||'') + ' · stock ' + p.stock + '</div>' +
+        '<div class="desc2">' + esc(p.descripcion) + ' — pedir ' + p.pedir + '</div></div></div>';
+    }).join('') + (QUIEBRES_STOCK.length > 300 ? '<div class="vacia">… y ' + (QUIEBRES_STOCK.length - 300) + ' más. Descarga el CSV para ver todos.</div>' : '');
+    $('qsVer').textContent = 'Ocultar lista';
+  };
+  $('qsDescargar').onclick = function(){
+    if (!QUIEBRES_STOCK || !QUIEBRES_STOCK.length) { toast('No hay quiebres de stock para descargar'); return; }
+    var sep = ';';
+    var csv = '﻿' + ['Código','Descripción','Oficina','Línea','Stock actual','Pedir (hasta 6)'].join(sep) + '\n' +
+      QUIEBRES_STOCK.map(function(p){
+        return [p.codigo, '"' + (p.descripcion||'').replace(/"/g,'""') + '"', '"' + (p.oficina||'').replace(/"/g,'""') + '"', '"' + (p.linea||'').replace(/"/g,'""') + '"', p.stock, p.pedir].join(sep);
+      }).join('\n');
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'quiebres_stock_' + HOY + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+  $('qsEnviar').onclick = function(){
+    if (!QUIEBRES_STOCK || !QUIEBRES_STOCK.length) { toast('No hay quiebres de stock para pedir'); return; }
+    var destino = $('qsDestino').value.trim();
+    if (!destino) { toast('Escribe el correo que recibirá el pedido'); return; }
+    var TOPE = 150; // un mailto con cientos de líneas puede fallar en algunos correos
+    var items = QUIEBRES_STOCK.slice(0, TOPE);
+    var asunto = 'Pedido de abastecimiento (quiebres de stock) · ' + HOY + ' · Luxury & Design';
+    var cuerpo = 'Stock objetivo: 6 unidades por código. Códigos con 2 unidades o menos:\n\n' +
+      items.map(function(p){
+        return '• ' + p.codigo + ' — ' + p.descripcion + ' (' + (p.oficina||'') + ') — stock actual ' + p.stock + ' — pedir ' + p.pedir;
+      }).join('\n') +
+      (QUIEBRES_STOCK.length > TOPE ? '\n\n… y ' + (QUIEBRES_STOCK.length - TOPE) + ' código(s) más. Descarga el CSV completo desde el Admin para verlos todos.' : '');
+    var mailto = 'mailto:' + encodeURIComponent(destino)
+      + '?subject=' + encodeURIComponent(asunto)
+      + '&body=' + encodeURIComponent(cuerpo);
+    // Nunca se envía solo: se abre tu app de correo con el pedido ya armado
+    // para que tú lo revises y lo mandes.
+    window.location.href = mailto;
+  };
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(function(){});
