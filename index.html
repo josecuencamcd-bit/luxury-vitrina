@@ -264,9 +264,12 @@ body{
               <a href="javascript:void(0)" id="lOlvide" style="font-size:12px;color:var(--ink-soft);text-decoration:underline">¿Olvidaste tu clave?</a>
             </div>
             <div id="lOlvidePanel" hidden style="margin-top:10px;border:1px dashed var(--line);border-radius:10px;padding:10px">
-              <div style="font-size:11.5px;color:var(--ink-soft)">Escribe tu código de vendedor. Se abrirá WhatsApp con un mensaje listo para pedirle al administrador que te restablezca la clave (tú lo envías, no se manda solo).</div>
+              <div style="font-size:11.5px;color:var(--ink-soft)">Verifica que eres tú con los mismos datos que usaste al crear tu cuenta, y pon tu clave nueva.</div>
               <input class="inp sm" id="lOlvideCodigo" type="text" placeholder="Tu código" style="margin-top:8px">
-              <button class="ghost sm" id="lOlvideEnviar" style="margin-top:8px;border-style:solid">📩 Avisar al administrador por WhatsApp</button>
+              <input class="inp sm" id="lOlvideNombre" type="text" placeholder="Tu nombre" style="margin-top:8px">
+              <input class="inp sm" id="lOlvideApellido" type="text" placeholder="Tu apellido" style="margin-top:8px">
+              <input class="inp sm" id="lOlvideClaveNueva" type="password" placeholder="Clave nueva (mín. 6, letras y números)" style="margin-top:8px">
+              <button class="btn" id="lOlvideEnviar" style="margin-top:8px">🔑 Cambiar mi clave</button>
             </div>
           </main>
         </div>
@@ -451,16 +454,6 @@ body{
             <button class="btn" id="qsEnviar" style="margin-top:8px">📩 Generar pedido de abastecimiento (mail)</button>
             <div id="qsLista" style="margin-top:8px"></div>
           </div>
-
-          <div class="admCard">
-            <div class="lbl" style="margin-top:0">Restablecer clave de un colaborador</div>
-            <div style="font-size:11.5px;color:var(--ink-soft)">Úsalo cuando alguien te avise que olvidó su clave (por WhatsApp con el botón "¿Olvidaste tu clave?" del login, o directo). Le entregas tú la clave nueva.</div>
-            <div class="lbl" style="margin-top:8px">Código del colaborador</div>
-            <input class="inp sm" id="rcCodigo" type="text" placeholder="Código">
-            <div class="lbl">Clave nueva</div>
-            <input class="inp sm" id="rcClave" type="text" placeholder="Mínimo 6 caracteres, letras y números">
-            <button class="btn" id="rcRestablecer" style="margin-top:8px">🔑 Restablecer clave</button>
-          </div>
         </main>
 
         <!-- Agente: chat del administrador con el bot (mismo motor que WhatsApp) -->
@@ -572,9 +565,10 @@ body{
     });
   });
 
-  // ---- Olvidé mi clave: NO se manda clave por ningún canal solo. Solo
-  // arma el mensaje de WhatsApp al administrador; él es quien de verdad la
-  // restablece desde Admin -> Restablecer clave. ----
+  // ---- Olvidé mi clave: autoservicio total, SIN pasar por el admin. El
+  // vendedor se verifica con código + nombre + apellido (mismos datos de
+  // cuando creó su cuenta) y pone su clave nueva directo. El admin nunca
+  // ve ni maneja claves de nadie. ----
   $('lOlvide').onclick = function(){
     var panel = $('lOlvidePanel');
     panel.hidden = !panel.hidden;
@@ -582,19 +576,22 @@ body{
   };
   $('lOlvideEnviar').onclick = function(){
     var codigo = ($('lOlvideCodigo').value || '').trim();
+    var nombre = ($('lOlvideNombre').value || '').trim();
+    var apellido = ($('lOlvideApellido').value || '').trim();
+    var claveNueva = $('lOlvideClaveNueva').value || '';
     if (!codigo) { toast('Escribe tu código de vendedor'); return; }
+    if (!nombre || !apellido) { toast('Escribe tu nombre y apellido'); return; }
+    if (!claveNueva) { toast('Escribe tu clave nueva'); return; }
     var btn = $('lOlvideEnviar'); btn.disabled = true;
-    // Se abre la pestaña YA, en el mismo click (si se abre recién dentro del
-    // .then() el navegador la bloquea por no venir "directo" de un toque).
-    var waWin = window.open('', '_blank');
-    api('auth-olvide-clave', { codigo: codigo }).then(function(res){
+    api('auth-restablecer-clave', { codigo: codigo, nombre: nombre, apellido: apellido, clave_nueva: claveNueva }).then(function(res){
       btn.disabled = false;
-      if (!res.ok) { if (waWin) waWin.close(); toast(res.data && res.data.error ? res.data.error : 'No se pudo generar el mensaje'); return; }
-      toast(res.data.sinNumero ? 'Falta el WhatsApp en CONFIG APP: elige el contacto al abrir WhatsApp.' : 'Abriendo WhatsApp…');
-      if (waWin && !waWin.closed) { waWin.location.href = res.data.url; } else { window.location.href = res.data.url; }
+      if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo cambiar la clave'); return; }
+      toast('Clave cambiada. Ya puedes entrar con tu clave nueva.');
+      $('lOlvidePanel').hidden = true;
+      $('lOlvideCodigo').value = ''; $('lOlvideNombre').value = ''; $('lOlvideApellido').value = ''; $('lOlvideClaveNueva').value = '';
+      $('lClave').value = '';
     }).catch(function(){
       btn.disabled = false;
-      if (waWin) waWin.close();
       toast('No se pudo conectar con el servidor.');
     });
   };
@@ -1727,24 +1724,6 @@ body{
     // Nunca se envía solo: se abre tu app de correo con el pedido ya armado
     // para que tú lo revises y lo mandes.
     window.location.href = mailto;
-  };
-
-  // ---- Restablecer clave de un colaborador (admin-reset-clave). La app
-  // nunca manda la clave sola: el admin la escribe acá y se la entrega él
-  // mismo (por WhatsApp, en persona, etc.). ----
-  $('rcRestablecer').onclick = function(){
-    var codigo = ($('rcCodigo').value || '').trim();
-    var claveNueva = $('rcClave').value || '';
-    if (!codigo) { toast('Escribe el código del colaborador'); return; }
-    if (!claveNueva) { toast('Escribe la clave nueva'); return; }
-    if (!confirm('¿Restablecer la clave del código ' + codigo + '? La clave anterior deja de funcionar.')) return;
-    var btn = $('rcRestablecer'); btn.disabled = true;
-    api('admin-reset-clave', { token: SESION.token, codigo: codigo, clave_nueva: claveNueva }).then(function(res){
-      btn.disabled = false;
-      if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo restablecer la clave'); return; }
-      toast('Clave restablecida para ' + (res.data.nombre || codigo));
-      $('rcCodigo').value = ''; $('rcClave').value = '';
-    }).catch(function(){ btn.disabled = false; toast('No se pudo conectar con el servidor.'); });
   };
 
   if ('serviceWorker' in navigator) {
