@@ -266,8 +266,7 @@ body{
             <div id="lOlvidePanel" hidden style="margin-top:10px;border:1px dashed var(--line);border-radius:10px;padding:10px">
               <div style="font-size:11.5px;color:var(--ink-soft)">Verifica que eres tú con los mismos datos que usaste al crear tu cuenta, y pon tu clave nueva.</div>
               <input class="inp sm" id="lOlvideCodigo" type="text" placeholder="Tu código" style="margin-top:8px">
-              <input class="inp sm" id="lOlvideNombre" type="text" placeholder="Tu nombre" style="margin-top:8px">
-              <input class="inp sm" id="lOlvideApellido" type="text" placeholder="Tu apellido" style="margin-top:8px">
+              <input class="inp sm" id="lOlvideCorreo" type="email" placeholder="Tu correo registrado" style="margin-top:8px">
               <input class="inp sm" id="lOlvideClaveNueva" type="password" placeholder="Clave nueva (mín. 6, letras y números)" style="margin-top:8px">
               <button class="btn" id="lOlvideEnviar" style="margin-top:8px">🔑 Cambiar mi clave</button>
             </div>
@@ -576,19 +575,18 @@ body{
   };
   $('lOlvideEnviar').onclick = function(){
     var codigo = ($('lOlvideCodigo').value || '').trim();
-    var nombre = ($('lOlvideNombre').value || '').trim();
-    var apellido = ($('lOlvideApellido').value || '').trim();
+    var correo = ($('lOlvideCorreo').value || '').trim();
     var claveNueva = $('lOlvideClaveNueva').value || '';
     if (!codigo) { toast('Escribe tu código de vendedor'); return; }
-    if (!nombre || !apellido) { toast('Escribe tu nombre y apellido'); return; }
+    if (!correo) { toast('Escribe tu correo registrado'); return; }
     if (!claveNueva) { toast('Escribe tu clave nueva'); return; }
     var btn = $('lOlvideEnviar'); btn.disabled = true;
-    api('auth-restablecer-clave', { codigo: codigo, nombre: nombre, apellido: apellido, clave_nueva: claveNueva }).then(function(res){
+    api('auth-restablecer-clave', { codigo: codigo, correo: correo, clave_nueva: claveNueva }).then(function(res){
       btn.disabled = false;
       if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo cambiar la clave'); return; }
       toast('Clave cambiada. Ya puedes entrar con tu clave nueva.');
       $('lOlvidePanel').hidden = true;
-      $('lOlvideCodigo').value = ''; $('lOlvideNombre').value = ''; $('lOlvideApellido').value = ''; $('lOlvideClaveNueva').value = '';
+      $('lOlvideCodigo').value = ''; $('lOlvideCorreo').value = ''; $('lOlvideClaveNueva').value = '';
       $('lClave').value = '';
     }).catch(function(){
       btn.disabled = false;
