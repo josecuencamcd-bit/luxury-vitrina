@@ -1189,6 +1189,11 @@ body{
       CONTEOS_EQUIPO = (res.data.data || []).map(function(c){
         return { id: c.id, fecha: c.fecha, hora: horaDe(c.created_at), cod: c.codigo, cant: Number(c.cantidad_contada), diferencia: Number(c.diferencia), estado: c.estado, desc: c.descripcion, colaborador: c.colaborador || '(sin nombre)' };
       });
+      // Total real por código: viene del servidor (vista estado_inventario_actual),
+      // la MISMA fuente que usa inventario-consultar (ficha del colaborador). No se
+      // recalcula aparte en el navegador, para que admin y colaborador vean
+      // siempre el mismo número para el mismo código.
+      TOTALES_REALES_EQUIPO = res.data.totales || {};
       renderSelectsConteoEquipo();
       renderConteosEquipo();
     });
@@ -1212,22 +1217,16 @@ body{
   // fila suelta (c.estado/c.diferencia) es solo de esa línea contra el stock
   // completo — por eso NO se usa para el badge, para no mostrar un
   // CUADRA/FALTA falso cuando el código se contó en más de una línea.
-  function totalesRealesPorCodigo(){
-    var mapa = {};
-    (CONTEOS_EQUIPO || []).forEach(function(c){
-      if (!mapa[c.cod]) {
-        var esperado = Number(c.cant) - Number(c.diferencia); // cantidad - diferencia = stock al momento de esa fila
-        mapa[c.cod] = { contado_total: 0, esperado: esperado };
-      }
-      mapa[c.cod].contado_total += Number(c.cant);
-    });
-    Object.keys(mapa).forEach(function(cod){
-      var m = mapa[cod];
-      m.diferencia_real = m.contado_total - m.esperado;
-      m.estado_real = m.diferencia_real === 0 ? 'CUADRA' : (m.diferencia_real > 0 ? 'SOBRA' : 'FALTA');
-    });
-    return mapa;
-  }
+  //
+  // El total real por código NO se calcula aquí: viene directo de
+  // TOTALES_REALES_EQUIPO, que llenó cargarConteosEquipo() con lo que
+  // devolvió el servidor desde la vista `estado_inventario_actual` — la
+  // MISMA que usa inventario-consultar (ficha del colaborador). Antes esto
+  // se recalculaba aquí con "cantidad - diferencia de la última fila", que
+  // podía no coincidir si el stock había cambiado entre conteos. Una sola
+  // fuente de verdad, en la base de datos, para que admin y colaborador
+  // vean siempre el mismo número.
+  var TOTALES_REALES_EQUIPO = {};
   function renderConteosEquipo(){
     if (!hayFiltroConteoEquipo()) { $('adConteoEquipo').innerHTML = ''; return; }
     var colab = $('adConteoColab').value, dia = $('adConteoDia').value, buscado = ($('adConteoBuscar').value || '').trim();
@@ -1236,12 +1235,11 @@ body{
     }).slice(0, 150);
     var el = $('adConteoEquipo');
     if (!filas.length) { el.innerHTML = vacia('Sin conteos', 'Nada con esos filtros.'); return; }
-    var totalesReales = totalesRealesPorCodigo();
     el.innerHTML = filas.map(function(c){
-      var t = totalesReales[c.cod];
+      var t = TOTALES_REALES_EQUIPO[c.cod];
       var est = !t ? { txt:'Verificando…', clase:'nocontado' } :
-        (t.estado_real === 'CUADRA' ? { txt:'CUADRA (total real: ' + t.contado_total + '/' + t.esperado + ')', clase:'cuadra' }
-          : { txt:t.estado_real + ' ' + Math.abs(t.diferencia_real) + ' (total real: ' + t.contado_total + '/' + t.esperado + ')', clase:(t.estado_real === 'SOBRA' ? 'sobra' : 'falta') });
+        (t.estado === 'CUADRA' ? { txt:'CUADRA (total real: ' + t.contado_total + '/' + t.esperado + ')', clase:'cuadra' }
+          : { txt:t.estado + ' ' + Math.abs(t.diferencia) + ' (total real: ' + t.contado_total + '/' + t.esperado + ')', clase:(t.estado === 'SOBRA' ? 'sobra' : 'falta') });
       return '<div class="filaConteo compacta" data-fila="' + c.id + '">' +
         '<div class="top"><div class="info"><div class="cod">' + c.cod + '</div>' +
         '<div class="desc2">' + esc(c.desc || 'Código no encontrado') + '</div>' +
