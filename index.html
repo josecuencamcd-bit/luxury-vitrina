@@ -11,6 +11,7 @@
 <style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
 :root{
   /* layout: app a pantalla completa, centrada en pantallas anchas */
@@ -899,6 +900,43 @@ body{
     }).catch(function(){ btn.disabled = false; toast('No se pudo conectar con el servidor.'); });
   };
   renderResumenInv();
+
+  // ---- Tiempo real: cuando CUALQUIERA (yo u otro colaborador) guarda un
+  // conteo para un código, se actualiza solo, sin tener que volver a
+  // buscar. Escucha inserts en conteos_inventario (y cambios de stock en
+  // productos) por WebSocket (Supabase Realtime) y refresca: la ficha
+  // abierta en Inventario si es el mismo código, y el estado real de las
+  // líneas de "Lo que llevo contado".
+  try {
+    if (window.supabase && window.supabase.createClient) {
+      var RT = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      function refrescarFichaSiAplica(codigo){
+        if (!codigo) return;
+        if (PRODUCTO_ACTUAL_INV && PRODUCTO_ACTUAL_INV.codigo === codigo && $('invCodigo').value.trim() === codigo) {
+          buscarInv();
+        }
+        var huboCambio = false;
+        MIS_CONTEOS.forEach(function(c){ if (c.cod === codigo) { huboCambio = true; delete c.estadoReal; } });
+        if (huboCambio) {
+          renderResumenInv();
+          fetchInventario(codigo).then(function(r2){
+            var p = r2.ok && r2.data && r2.data.data && r2.data.data[0];
+            if (!p || typeof p.estado === 'undefined') return;
+            MIS_CONTEOS.forEach(function(c){ if (c.cod === codigo) { c.estadoReal = p.estado; c.diferenciaReal = Number(p.diferencia); c.contadoTotal = Number(p.contado_total); } });
+            renderResumenInv();
+          }).catch(function(){});
+        }
+      }
+      RT.channel('conteos-en-vivo')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conteos_inventario' }, function(payload){
+          refrescarFichaSiAplica(payload.new && payload.new.codigo);
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'productos' }, function(payload){
+          refrescarFichaSiAplica(payload.new && payload.new.codigo);
+        })
+        .subscribe();
+    }
+  } catch (e) { /* si falla el tiempo real, la app sigue funcionando igual con "Buscar" manual */ }
 
   function fechaLegible(f){
     if (f === HOY) return 'Hoy · ' + f;
