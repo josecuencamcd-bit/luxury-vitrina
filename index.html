@@ -316,7 +316,16 @@ body{
           <select class="inp" id="invHistDia"></select>
           <div class="lbl" style="margin-top:10px">Buscar por código</div>
           <input class="inp" id="invHistBuscar" inputmode="numeric" placeholder="Ej. 100052" autocomplete="off">
+          <button class="ghost sm" id="invHistSelVarios" style="margin-top:8px;border-style:solid">☑️ Seleccionar varios para borrar</button>
           <div id="invHistLista" style="margin-top:4px"></div>
+          <div id="invHistSelBarra" hidden style="position:sticky;bottom:64px;margin-top:8px;background:var(--card);border:1.5px dashed #c0392b;border-radius:8px;padding:8px;">
+            <div style="font-size:11.5px;font-weight:700" id="invHistSelCont">0 seleccionados</div>
+            <input class="inp sm" id="invHistSelMotivo" placeholder="Motivo (ej. me equivoqué al tipear)" style="margin-top:6px">
+            <div class="motivoRow">
+              <button class="enviar" id="invHistSelEnviar" style="background:#c0392b;color:#fff">🗑️ Borrar seleccionados</button>
+              <button class="cancelar" id="invHistSelCancelar">Cancelar</button>
+            </div>
+          </div>
         </main>
 
         <!-- Oferta vigente: buscador + listado -->
@@ -826,6 +835,60 @@ body{
     sel.innerHTML = dias.length ? dias.map(function(f){ return '<option value="' + f + '">' + fechaLegible(f) + '</option>'; }).join('') : '<option value="">Sin conteos todavía</option>';
   }
 
+  // ---- Selección múltiple para borrar varios conteos de una vez ----
+  // Cada uno sigue mandando su propia solicitud BORRAR (con el mismo
+  // motivo compartido) — no hay borrado directo nuevo, solo se junta el
+  // trámite de pedirlas una por una en un solo click. Quedan igual
+  // pendientes de aprobación del admin, como cualquier solicitud.
+  var SELECCION_MULTIPLE = false;
+  var SELECCIONADOS = {};
+  var PENDIENTES_BORRAR = {}; // ids ya solicitados en esta sesión, para no repetir
+
+  function actualizarBarraSeleccion(){
+    var ids = Object.keys(SELECCIONADOS).filter(function(id){ return SELECCIONADOS[id]; });
+    var barra = $('invHistSelBarra');
+    if (!SELECCION_MULTIPLE || !ids.length) { barra.hidden = true; return; }
+    barra.hidden = false;
+    $('invHistSelCont').textContent = ids.length + (ids.length === 1 ? ' seleccionado' : ' seleccionados');
+  }
+
+  $('invHistSelVarios').onclick = function(){
+    SELECCION_MULTIPLE = !SELECCION_MULTIPLE;
+    SELECCIONADOS = {};
+    $('invHistSelVarios').textContent = SELECCION_MULTIPLE ? '✖️ Cancelar selección' : '☑️ Seleccionar varios para borrar';
+    actualizarBarraSeleccion();
+    renderMisConteos();
+  };
+  $('invHistSelCancelar').onclick = function(){
+    SELECCIONADOS = {};
+    actualizarBarraSeleccion();
+    renderMisConteos();
+  };
+  $('invHistSelEnviar').onclick = function(){
+    var ids = Object.keys(SELECCIONADOS).filter(function(id){ return SELECCIONADOS[id]; });
+    var motivo = ($('invHistSelMotivo').value || '').trim();
+    if (!ids.length) { toast('Elige al menos un conteo'); return; }
+    if (!motivo) { toast('Escribe un motivo breve'); return; }
+    if (!confirm('¿Enviar ' + ids.length + ' solicitudes de borrado con este motivo? Quedan pendientes de aprobación del admin.')) return;
+    var btn = $('invHistSelEnviar'); btn.disabled = true;
+    Promise.all(ids.map(function(id){
+      var conteo = MIS_CONTEOS_HIST.filter(function(c){ return String(c.id) === id; })[0];
+      if (!conteo) return Promise.resolve({ ok: false });
+      return api('solicitud-crear', { token: SESION.token, codigo: conteo.cod, tipo: 'BORRAR', conteo_id: conteo.id, motivo: motivo })
+        .then(function(res){ return { ok: res.ok, id: id }; }).catch(function(){ return { ok: false, id: id }; });
+    })).then(function(resultados){
+      btn.disabled = false;
+      var ok = resultados.filter(function(r){ return r.ok; });
+      var fallidos = resultados.length - ok.length;
+      ok.forEach(function(r){ PENDIENTES_BORRAR[r.id] = true; });
+      toast(ok.length + ' solicitud' + (ok.length === 1 ? '' : 'es') + ' enviada' + (ok.length === 1 ? '' : 's') + (fallidos ? ' · ' + fallidos + ' no se pudo enviar' : '') + ' — pendiente de aprobación del admin');
+      SELECCIONADOS = {};
+      $('invHistSelMotivo').value = '';
+      actualizarBarraSeleccion();
+      renderMisConteos();
+    });
+  };
+
   function renderMisConteos(){
     var fecha = $('invHistDia').value;
     var buscado = ($('invHistBuscar').value || '').trim();
@@ -833,16 +896,29 @@ body{
     var el = $('invHistLista');
     if (!filas.length) { el.innerHTML = vacia('Sin conteos', buscado ? 'Nada con ese código ese día.' : 'Elige otro día en el selector.'); return; }
     el.innerHTML = filas.map(function(c){
-      return '<div class="filaConteo compacta" data-fila="' + c.id + '">' +
-        '<div class="top"><div class="info"><div class="cod">' + c.cod + '</div>' +
+      var idStr = String(c.id);
+      var pendiente = !!PENDIENTES_BORRAR[idStr];
+      var chk = SELECCION_MULTIPLE ? ('<input type="checkbox" class="chkSelConteo" data-id="' + idStr + '" style="margin-right:7px;flex-shrink:0;width:18px;height:18px"' + (pendiente ? ' disabled' : (SELECCIONADOS[idStr] ? ' checked' : '')) + '>') : '';
+      var acciones = pendiente
+        ? '<div class="acciones"><span style="flex:1;text-align:center;font-size:9.5px;color:var(--ink-soft);padding:3px 0">⏳ Solicitud de borrado pendiente</span></div>'
+        : ('<div class="acciones">' +
+            '<button data-accion="editar" data-id="' + idStr + '">✏️ Modificar</button>' +
+            '<button class="danger" data-accion="borrar" data-id="' + idStr + '">🗑️ Borrar</button>' +
+          '</div>');
+      return '<div class="filaConteo compacta" data-fila="' + idStr + '">' +
+        '<div class="top">' + chk + '<div class="info"><div class="cod">' + c.cod + '</div>' +
         '<div class="desc2">' + esc(c.desc || 'Código no encontrado') + '</div>' +
         '<div class="hora">' + c.hora + '</div></div>' +
         '<div class="cant">' + c.cant + '</div></div>' +
-        '<div class="acciones">' +
-          '<button data-accion="editar" data-id="' + c.id + '">✏️ Modificar</button>' +
-          '<button class="danger" data-accion="borrar" data-id="' + c.id + '">🗑️ Borrar</button>' +
-        '</div><div class="motivoWrap"></div></div>';
+        acciones + '<div class="motivoWrap"></div></div>';
     }).join('');
+
+    Array.prototype.forEach.call(el.querySelectorAll('.chkSelConteo'), function(chk){
+      chk.onchange = function(){
+        SELECCIONADOS[chk.getAttribute('data-id')] = chk.checked;
+        actualizarBarraSeleccion();
+      };
+    });
 
     Array.prototype.forEach.call(el.querySelectorAll('[data-accion]'), function(b){
       b.onclick = function(){
@@ -874,6 +950,10 @@ body{
 
   $('bVerMisConteos').onclick = function(){
     $('invHistBuscar').value = '';
+    SELECCION_MULTIPLE = false;
+    SELECCIONADOS = {};
+    $('invHistSelVarios').textContent = '☑️ Seleccionar varios para borrar';
+    actualizarBarraSeleccion();
     $('invHistLista').innerHTML = '<div class="vacia">Cargando…</div>';
     cargarMisConteos(function(filas){
       MIS_CONTEOS_HIST = filas;
