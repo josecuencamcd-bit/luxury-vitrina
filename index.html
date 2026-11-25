@@ -291,6 +291,11 @@ body{
           <div><h2>Luxury &amp; Design</h2><small id="quien"></small><small class="cambio">US$1 = $1.000 · AR$1.600</small></div>
         </div>
 
+        <div id="bannerVistaColab" hidden style="background:var(--gold);color:#141210;font-weight:700;font-size:12.5px;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span>👁 Viendo como colaborador</span>
+          <button id="btnVolverAdmin" style="background:#141210;color:var(--gold);border:none;border-radius:8px;padding:6px 10px;font-weight:700;font-size:12px">Volver a Admin</button>
+        </div>
+
         <!-- Inventario -->
         <main class="appMain" id="pInv">
           <div class="lbl">Código</div>
@@ -360,6 +365,7 @@ body{
 
         <!-- Admin: tipo de cambio compacto, activar/desactivar, filtro unificado -->
         <main class="appMain" id="pAdmin" hidden>
+          <button class="ghost" id="btnVerComoColab" style="border-style:solid;margin-bottom:10px">👁 Ver como colaborador</button>
           <div class="admStats" id="adResumen"></div>
 
           <div class="admCard">
@@ -728,6 +734,26 @@ body{
       mostrar(b.getAttribute('data-t'));
     });
   });
+
+  // ---- Ver como colaborador (solo vista, no cambia tu sesión ni tu rol) ----
+  function irAPanel(id){
+    document.querySelectorAll('.tabbar button').forEach(function(x){ x.classList.remove('on'); });
+    var btn = document.querySelector('.tabbar button[data-t="' + id + '"]');
+    if (btn) btn.classList.add('on');
+    mostrar(id);
+  }
+  $('btnVerComoColab').onclick = function(){
+    $('tabAdmin').hidden = true;
+    $('tabAgente').hidden = true;
+    $('bannerVistaColab').hidden = false;
+    irAPanel('pInv');
+  };
+  $('btnVolverAdmin').onclick = function(){
+    var esAdmin = SESION.perfil && String(SESION.perfil.rol || '').toUpperCase() === 'ADMIN';
+    if (esAdmin) { $('tabAdmin').hidden = false; $('tabAgente').hidden = false; }
+    $('bannerVistaColab').hidden = true;
+    irAPanel('pAdmin');
+  };
 
   // ---- Mis conteos por día (ver / editar / borrar con flujo de aprobación) ----
   // HOY usa la fecha LOCAL del teléfono (no UTC): toISOString() siempre da
