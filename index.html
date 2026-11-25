@@ -838,7 +838,7 @@ body{
       if (typeof c.estadoReal !== 'undefined') {
         est = c.estadoReal === 'CUADRA' ? { txt:'CUADRA (total real)', clase:'cuadra' } : { txt:c.estadoReal + ' ' + Math.abs(c.diferenciaReal) + ' (total real)', clase:(c.estadoReal === 'SOBRA' ? 'sobra' : 'falta') };
       } else {
-        est = { txt:'Verificando total real…', clase:'cuadra' };
+        est = { txt:'Verificando total real…', clase:'nocontado' };
       }
       return '<div class="filaConteo"><div class="top"><div class="info"><div class="cod">' + c.cod + '</div>' +
         '<div class="desc2">' + esc(c.desc || 'Código no encontrado') + '</div>' +
@@ -1206,6 +1206,28 @@ body{
     selDia.innerHTML = '<option value="">— Elegir —</option><option value="TODOS">Todos</option>' + dias.map(function(f){ return '<option value="' + f + '">' + fechaLegible(f) + '</option>'; }).join('');
     if (dias.indexOf(valDia) !== -1 || valDia === 'TODOS') selDia.value = valDia;
   }
+  // Totales REALES por código, a partir de TODAS las filas que tiene el
+  // admin cargadas (sin importar el filtro de día/colaborador en pantalla),
+  // igual que el total que ya se muestra en Inventario. El estado de cada
+  // fila suelta (c.estado/c.diferencia) es solo de esa línea contra el stock
+  // completo — por eso NO se usa para el badge, para no mostrar un
+  // CUADRA/FALTA falso cuando el código se contó en más de una línea.
+  function totalesRealesPorCodigo(){
+    var mapa = {};
+    (CONTEOS_EQUIPO || []).forEach(function(c){
+      if (!mapa[c.cod]) {
+        var esperado = Number(c.cant) - Number(c.diferencia); // cantidad - diferencia = stock al momento de esa fila
+        mapa[c.cod] = { contado_total: 0, esperado: esperado };
+      }
+      mapa[c.cod].contado_total += Number(c.cant);
+    });
+    Object.keys(mapa).forEach(function(cod){
+      var m = mapa[cod];
+      m.diferencia_real = m.contado_total - m.esperado;
+      m.estado_real = m.diferencia_real === 0 ? 'CUADRA' : (m.diferencia_real > 0 ? 'SOBRA' : 'FALTA');
+    });
+    return mapa;
+  }
   function renderConteosEquipo(){
     if (!hayFiltroConteoEquipo()) { $('adConteoEquipo').innerHTML = ''; return; }
     var colab = $('adConteoColab').value, dia = $('adConteoDia').value, buscado = ($('adConteoBuscar').value || '').trim();
@@ -1214,8 +1236,12 @@ body{
     }).slice(0, 150);
     var el = $('adConteoEquipo');
     if (!filas.length) { el.innerHTML = vacia('Sin conteos', 'Nada con esos filtros.'); return; }
+    var totalesReales = totalesRealesPorCodigo();
     el.innerHTML = filas.map(function(c){
-      var est = c.estado === 'CUADRA' ? { txt:'CUADRA', clase:'cuadra' } : { txt:(c.diferencia > 0 ? 'SOBRA ' + c.diferencia : 'FALTA ' + (-c.diferencia)), clase:(c.diferencia > 0 ? 'sobra' : 'falta') };
+      var t = totalesReales[c.cod];
+      var est = !t ? { txt:'Verificando…', clase:'nocontado' } :
+        (t.estado_real === 'CUADRA' ? { txt:'CUADRA (total real: ' + t.contado_total + '/' + t.esperado + ')', clase:'cuadra' }
+          : { txt:t.estado_real + ' ' + Math.abs(t.diferencia_real) + ' (total real: ' + t.contado_total + '/' + t.esperado + ')', clase:(t.estado_real === 'SOBRA' ? 'sobra' : 'falta') });
       return '<div class="filaConteo compacta" data-fila="' + c.id + '">' +
         '<div class="top"><div class="info"><div class="cod">' + c.cod + '</div>' +
         '<div class="desc2">' + esc(c.desc || 'Código no encontrado') + '</div>' +
