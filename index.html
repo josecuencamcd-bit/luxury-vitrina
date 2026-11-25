@@ -861,6 +861,14 @@ body{
       if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo guardar'); return; }
       var d = res.data.data;
       var hora = new Date().toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit', timeZone:'America/Punta_Arenas' });
+      $('invCodigo').value = ''; $('invCantidad').value = ''; $('invFicha').innerHTML = vacia('Ingresa un código', 'Escanea o escribe el código del producto.'); $('invCodigo').focus();
+      if (d.duplicado) {
+        // El servidor detectó que esto mismo ya se había guardado hace
+        // segundos (doble tap, mala conexión) y NO insertó una fila nueva.
+        // No la agregamos de nuevo a la lista local tampoco.
+        toast('Ya estaba guardado: ' + cod + ' × ' + cant + ' (no se duplicó)');
+        return;
+      }
       // d.estado/d.diferencia que manda conteo-registrar es SOLO de esta
       // línea (cantidad vs stock total), no del acumulado real si el código
       // ya se contó antes (por mí o por otra persona). Guardamos la línea
@@ -872,7 +880,6 @@ body{
       MIS_CONTEOS.unshift(entrada);
       renderResumenInv();
       toast('Guardado: ' + cod + ' × ' + cant + ' — verificando total real…');
-      $('invCodigo').value = ''; $('invCantidad').value = ''; $('invFicha').innerHTML = vacia('Ingresa un código', 'Escanea o escribe el código del producto.'); $('invCodigo').focus();
       fetchInventario(cod).then(function(r2){
         var p = r2.ok && r2.data && r2.data.data && r2.data.data[0];
         if (!p || typeof p.estado === 'undefined') return;
