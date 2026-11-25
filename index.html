@@ -829,7 +829,16 @@ body{
     $('invMisUnidades').textContent = MIS_CONTEOS.reduce(function(s,c){ return s + c.cant; }, 0);
     var ultimas = MIS_CONTEOS.slice(0, 10);
     $('invLista').innerHTML = ultimas.length ? ultimas.map(function(c){
-      var est = c.estado === 'CUADRA' ? { txt:'CUADRA', clase:'cuadra' } : { txt:(c.diferencia > 0 ? 'SOBRA ' + c.diferencia : 'FALTA ' + (-c.diferencia)), clase:(c.diferencia > 0 ? 'sobra' : 'falta') };
+      // Usamos el estado REAL acumulado (contado total del código vs stock)
+      // cuando ya llegó de inventario-consultar; mientras llega, mostramos
+      // un estado neutro en vez del de esta sola línea, que es engañoso si
+      // el código ya se contó antes en otra línea.
+      var est;
+      if (typeof c.estadoReal !== 'undefined') {
+        est = c.estadoReal === 'CUADRA' ? { txt:'CUADRA (total real)', clase:'cuadra' } : { txt:c.estadoReal + ' ' + Math.abs(c.diferenciaReal) + ' (total real)', clase:(c.estadoReal === 'SOBRA' ? 'sobra' : 'falta') };
+      } else {
+        est = { txt:'Verificando total real…', clase:'cuadra' };
+      }
       return '<div class="filaConteo"><div class="top"><div class="info"><div class="cod">' + c.cod + '</div>' +
         '<div class="desc2">' + esc(c.desc || 'Código no encontrado') + '</div>' +
         '<div class="hora">' + c.hora + '</div></div>' +
@@ -850,11 +859,26 @@ body{
       $('invGuardar').disabled = false;
       if (!res.ok) { toast(res.data && res.data.error ? res.data.error : 'No se pudo guardar'); return; }
       var d = res.data.data;
-      var ahora = new Date(), hh = ('0'+ahora.getHours()).slice(-2), mm = ('0'+ahora.getMinutes()).slice(-2);
-      MIS_CONTEOS.unshift({ id: d.id, fecha: d.fecha, hora: hh+':'+mm, cod: d.codigo, cant: Number(d.cantidad_contada), diferencia: Number(d.diferencia), estado: d.estado, desc: d.descripcion, created_at: d.created_at });
+      var hora = new Date().toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit', timeZone:'America/Punta_Arenas' });
+      // d.estado/d.diferencia que manda conteo-registrar es SOLO de esta
+      // línea (cantidad vs stock total), no del acumulado real si el código
+      // ya se contó antes (por mí o por otra persona). Guardamos la línea
+      // tal cual, pero pedimos aparte el total real acumulado
+      // (inventario-consultar lo suma) para no mostrar un "FALTA" falso
+      // cuando entre todas las líneas de ese código en realidad cuadra o
+      // sobra.
+      var entrada = { id: d.id, fecha: d.fecha, hora: hora, cod: d.codigo, cant: Number(d.cantidad_contada), diferencia: Number(d.diferencia), estado: d.estado, desc: d.descripcion, created_at: d.created_at };
+      MIS_CONTEOS.unshift(entrada);
       renderResumenInv();
-      toast(d.estado === 'CUADRA' ? '✔ Cuadra: ' + cod + ' × ' + cant : '⚠ Diferencia (' + d.diferencia + '): ' + cod + ' × ' + cant);
+      toast('Guardado: ' + cod + ' × ' + cant + ' — verificando total real…');
       $('invCodigo').value = ''; $('invCantidad').value = ''; $('invFicha').innerHTML = vacia('Ingresa un código', 'Escanea o escribe el código del producto.'); $('invCodigo').focus();
+      fetchInventario(cod).then(function(r2){
+        var p = r2.ok && r2.data && r2.data.data && r2.data.data[0];
+        if (!p || typeof p.estado === 'undefined') return;
+        entrada.estadoReal = p.estado; entrada.diferenciaReal = Number(p.diferencia); entrada.contadoTotal = Number(p.contado_total);
+        renderResumenInv();
+        toast(p.estado === 'CUADRA' ? '✔ ' + cod + ' cuadra en total (contado ' + p.contado_total + ' / esperado ' + (Number(p.contado_total) - Number(p.diferencia)) + ')' : '⚠ ' + p.estado + ' ' + Math.abs(Number(p.diferencia)) + ' en total acumulado de ' + cod);
+      }).catch(function(){ /* si falla la verificación, queda el estado de solo esta línea */ });
     }).catch(function(){ $('invGuardar').disabled = false; toast('No se pudo conectar con el servidor.'); });
   };
   // Deshacer la ÚLTIMA línea propia es inmediato, sin pasar por aprobación
@@ -1549,7 +1573,9 @@ body{
   // Guarda la última respuesta cruda para el botón de descarga CSV.
   var ESTAD_ULTIMA = null;
   var TIPO_TXT = { login:'Inicio de sesión', consulta_inventario:'Consultó inventario', consulta_precio_flash:'Consultó precio (Promo Flash)', consulta_precio_vigente:'Consultó Oferta vigente' };
-  function horaDe(iso){ try { return new Date(iso).toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit' }); } catch(e){ return ''; } }
+  // Siempre en hora de Punta Arenas (America/Punta_Arenas), sin depender de
+  // cómo tenga configurado el reloj/zona horaria el celular de quien mira.
+  function horaDe(iso){ try { return new Date(iso).toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit', timeZone:'America/Punta_Arenas' }); } catch(e){ return ''; } }
   function renderActividadAdmin(){
     var el = $('adActividad');
     if (!el) return;
