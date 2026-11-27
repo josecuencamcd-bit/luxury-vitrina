@@ -44,6 +44,22 @@ body{
   padding-left:env(safe-area-inset-left,0px); padding-right:env(safe-area-inset-right,0px);
   overflow:hidden;
 }
+/* PC / pantalla ancha: en vez de una tarjeta angosta flotando en una página
+   del mismo color (apenas se nota la sombra), se arma una ventana centrada
+   con fondo propio detrás — se ve como una app de escritorio real, instalada
+   o no. No afecta el celular (el breakpoint nunca se alcanza ahí). */
+@media (min-width:541px){
+  body{
+    background:
+      radial-gradient(1100px 700px at 15% -10%, color-mix(in srgb, var(--gold) 14%, transparent), transparent 60%),
+      var(--panel);
+  }
+  .wrap{
+    margin:28px auto; height:calc(100dvh - 56px); max-height:860px;
+    border-radius:18px; overflow:hidden;
+    box-shadow:0 24px 70px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.06);
+  }
+}
 
 .stage{display:flex;flex-direction:column;flex:1;min-height:0;}
 .phone{flex:1;min-height:0;display:flex;flex-direction:column;}
